@@ -1,0 +1,17 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"baseBranchPatterns": ["main"],
+	"extends": ["config:best-practices", "group:githubArtifactActions"],
+	"labels": ["dependencies", "renovate"],
+	"lockFileMaintenance": {
+		"enabled": true,
+		"extends": ["schedule:monthly"]
+	},
+	"packageRules": [
+		{ "matchDatasources": ["npm"], "minimumReleaseAge": "1 month" },
+		{ "groupName": "allons-y toolkit", "matchPackageNames": ["@allons-y/toolkit", "@allons-y/envoy"] }
+	],
+	"postUpdateOptions": ["yarnDedupeHighest"],
+	"rebaseWhen": "behind-base-branch",
+	"reviewers": ["castastrophe"]
+}
