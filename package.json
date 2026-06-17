@@ -8,7 +8,7 @@
 	"version": "0.0.0",
 	"description": "Compare compiled assets between branches and report the diff back on the pull request.",
 	"license": "Apache-2.0",
-	"author": "Cassondra Roberts <castastrophe@users.noreply.github.com> (https://allons-y.llc)",
+	"author": "Cassondra Roberts <castastrophe@users.noreply.github.com> (https://allons-y.studio)",
 	"homepage": "https://github.com/castastrophe/actions-file-diff#readme",
 	"repository": {
 		"type": "git",
