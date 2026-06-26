@@ -9,7 +9,8 @@ on:
 jobs:
     test:
         permissions:
-            pull-requests: write
+            contents: read # required for actions/checkout to read the repo
+            pull-requests: write # sticky-pull-request-comment posts the coverage comment
         runs-on: ubuntu-latest
         steps:
             - name: Check out code
