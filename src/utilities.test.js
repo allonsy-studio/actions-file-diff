@@ -1,10 +1,11 @@
 import { bytesToSize } from "./utilities.js";
 
 describe("bytesToSize", () => {
-	it("returns '-' for falsy input", () => {
-		// NB: 0 also hits the `!bytes` guard and returns "-", so the
-		// `bytes === 0` branch in the source is currently unreachable.
-		expect(bytesToSize(0)).toBe("-");
+	it("returns '0' for a zero-byte file", () => {
+		expect(bytesToSize(0)).toBe("0");
+	});
+
+	it("returns '-' for nullish input", () => {
 		expect(bytesToSize(undefined)).toBe("-");
 		expect(bytesToSize(null)).toBe("-");
 	});
