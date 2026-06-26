@@ -40,8 +40,8 @@ function debugEmptyDirectory(path, pattern, { core }) {
 }
 
 export function bytesToSize(bytes) {
-	if (!bytes) return "-";
 	if (bytes === 0) return "0";
+	if (!bytes) return "-";
 
 	const sizes = ["bytes", "KB", "MB", "GB", "TB"];
 	const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
