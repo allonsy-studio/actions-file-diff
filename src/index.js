@@ -50,7 +50,7 @@ async function run() {
 	const markdown = [];
 	const summary = ["### Summary", `**Total size**: ${bytesToSize(overallHeadSize)}<sup>*</sup>`];
 
-	let summaryTable = [];
+	const summaryTable = [];
 
 	if (sections.length === 0) {
 		summary.push("", " 🎉 No changes detected in any packages");
@@ -112,23 +112,12 @@ async function run() {
 				return table;
 			};
 
-			markdown.push(
-				"",
-				`#### ${name}`,
-				"",
-				...[tableHead, tableHead.map(() => "-")].map((row) => `| ${row.join(" | ")} |`),
-				...[...fileMap.entries()].reduce(tableRows, []).map((row) => `| ${row.join(" | ")} |`),
-			);
+			markdown.push("", `#### ${name}`, "", ...[tableHead, tableHead.map(() => "-")].map((row) => `| ${row.join(" | ")} |`), ...[...fileMap.entries()].reduce(tableRows, []).map((row) => `| ${row.join(" | ")} |`));
 		});
 
 		if (hasBase) {
 			if (hasChange) {
-				summary.push(
-					`**Total change (Δ)**: ${printChange(overallHeadSize, overallBaseSize)} (${printPercentChange(overallHeadSize, overallBaseSize)})`,
-					"",
-					`<small><em>Table reports on changes to a package's main file.${sections.length > 1 ? ` Other changes can be found in the collapsed <a href="#details">Details</a> section below.` : ""}</em></small>`,
-					"",
-				);
+				summary.push(`**Total change (Δ)**: ${printChange(overallHeadSize, overallBaseSize)} (${printPercentChange(overallHeadSize, overallBaseSize)})`, "", `<small><em>Table reports on changes to a package's main file.${sections.length > 1 ? ` Other changes can be found in the collapsed <a href="#details">Details</a> section below.` : ""}</em></small>`, "");
 			} else if (sections.length > 1) {
 				summary.push("✅ **No change in file sizes**", "");
 			}
@@ -146,7 +135,10 @@ async function run() {
 		const summaryTableHeader = ["Package", "Size", "Minified", "Gzipped"];
 		if (hasBase && hasChange) summaryTableHeader.push("Δ");
 
-		summaryTable.unshift(summaryTableHeader, summaryTableHeader.map(() => "-"));
+		summaryTable.unshift(
+			summaryTableHeader,
+			summaryTableHeader.map(() => "-"),
+		);
 
 		summary.push(
 			...summaryTable.map((row) => {
