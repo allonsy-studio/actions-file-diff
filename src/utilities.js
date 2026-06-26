@@ -39,7 +39,7 @@ function debugEmptyDirectory(path, pattern, { core }) {
 	throw new Error(`No files found matching the glob pattern: ${pattern.map((p) => join(path, p)).join(", ")}`);
 }
 
-export function bytesToSize (bytes) {
+export function bytesToSize(bytes) {
 	if (!bytes) return "-";
 	if (bytes === 0) return "0";
 
@@ -55,7 +55,7 @@ export function bytesToSize (bytes) {
 	return (bytes / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
 }
 
-export async function addComment ({ search, content, token }) {
+export async function addComment({ search, content, token }) {
 	const octokit = new getOctokit(token);
 
 	const pullRequest = context.payload.pull_request;
@@ -79,7 +79,7 @@ export async function addComment ({ search, content, token }) {
 	return octokit.rest.issues[action](commentData);
 }
 
-export async function fetchFilesAndSizes (rootPath, patterns = [], { core }) {
+export async function fetchFilesAndSizes(rootPath, patterns = [], { core }) {
 	if (!existsSync(rootPath)) return new Map();
 
 	const globber = await create(patterns.map((f) => join(rootPath, f)).join("\n"));
