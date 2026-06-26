@@ -27,13 +27,13 @@
 	"scripts": {
 		"changeset": "changeset",
 		"ci": "yarn lint",
-		"coverage": "jest --coverage",
+		"coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
 		"format": "prettier --write . && yarn lint --fix",
 		"lint": "eslint --no-error-on-unmatched-pattern --no-warn-ignored --cache '**/*'",
 		"precommit": "lint-staged",
 		"prepare": "husky && envoy || true",
 		"release": "changeset publish",
-		"test": "jest --experimental-vm-modules",
+		"test": "NODE_OPTIONS=--experimental-vm-modules jest",
 		"version-packages": "changeset version"
 	},
 	"dependencies": {
