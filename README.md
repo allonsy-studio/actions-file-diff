@@ -1,13 +1,13 @@
+<!-- weaver:header:START -->
 # actions-file-diff
 
 > Compare file sizes between branches and report the diff back on the pull request.
-
-Originally lived inline at `vague-ds/.github/actions/file-diff`. Lifted into a standalone repo as a JavaScript-only GitHub Action (no TS, no bundling).
+<!-- weaver:header:END -->
 
 ## Usage
 
 ```yaml
-- uses: castastrophe/actions-file-diff@v1
+- uses: allonsy-studio/actions-file-diff@v1
   with:
       head-path: ${{ github.workspace }}/packages
       base-path: /tmp/main-checkout/packages
@@ -42,3 +42,12 @@ yarn lint      # eslint (flat config, @eslint/js recommended + prettier)
 yarn format    # prettier --write, then eslint --fix
 yarn test      # jest, JS-only
 ```
+
+<!-- weaver:contribution:START -->
+<!-- weaver:contribution:END -->
+
+<!-- weaver:license_apache:START -->
+<!-- weaver:license_apache:END -->
+
+<!-- weaver:funding:START -->
+<!-- weaver:funding:END -->
