@@ -1,0 +1,109 @@
+name: Self-test
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        types: [opened, synchronize, reopened]
+
+# Read-only: the action is run with comment=false, so no PR write access is needed.
+permissions:
+    contents: read
+
+jobs:
+    self-test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+
+            - name: Enable corepack
+              run: corepack enable
+
+            - name: Setup Node
+              uses: actions/setup-node@v6
+              with:
+                  node-version-file: .nvmrc
+                  cache: yarn
+
+            - name: Install dependencies
+              run: yarn install --immutable
+
+            - name: Build the bundle
+              run: yarn build
+
+            - name: Verify the committed bundle is current
+              run: |
+                  if ! git ls-files --error-unmatch dist/index.cjs > /dev/null 2>&1; then
+                      echo "::error::dist/index.cjs is not tracked; run \`yarn build\` and commit the result"
+                      exit 1
+                  fi
+                  if ! git diff --exit-code -- dist/; then
+                      echo "::error::dist/index.cjs is stale; run \`yarn build\` and commit the result"
+                      exit 1
+                  fi
+
+            - name: Build the fixture
+              run: scripts/make-fixture.sh "${RUNNER_TEMP}/fixture"
+
+            - name: Run against changed trees
+              id: changed
+              uses: ./
+              with:
+                  head-path: ${{ runner.temp }}/fixture/head
+                  base-path: ${{ runner.temp }}/fixture/base
+                  file-glob-pattern: "**/dist/**"
+                  comment: "false"
+
+            - name: Run against identical trees
+              id: same
+              uses: ./
+              with:
+                  head-path: ${{ runner.temp }}/fixture/head
+                  base-path: ${{ runner.temp }}/fixture/head
+                  file-glob-pattern: "**/dist/**"
+                  comment: "false"
+
+            - name: Run without a base
+              id: nobase
+              uses: ./
+              with:
+                  head-path: ${{ runner.temp }}/fixture/head
+                  file-glob-pattern: "**/dist/**"
+                  comment: "false"
+
+            # Expected head total: foo -> 50 (index.min.css stands in for index.css),
+            # bar -> 5000 (index.js). .gz files are not counted. 50 + 5000 = 5050.
+            - name: Assert outputs
+              env:
+                  CHANGED_HAS_CHANGED: ${{ steps.changed.outputs.has-changed }}
+                  CHANGED_TOTAL_SIZE: ${{ steps.changed.outputs.total-size }}
+                  SAME_HAS_CHANGED: ${{ steps.same.outputs.has-changed }}
+                  SAME_TOTAL_SIZE: ${{ steps.same.outputs.total-size }}
+                  NOBASE_HAS_CHANGED: ${{ steps.nobase.outputs.has-changed }}
+                  NOBASE_TOTAL_SIZE: ${{ steps.nobase.outputs.total-size }}
+              run: |
+                  failed=0
+                  # assert <label> <expected> <actual>
+                  assert() {
+                      if [[ "$3" != "$2" ]]; then
+                          echo "::error::$1: expected '$2' but got '$3'"
+                          failed=1
+                      else
+                          echo "ok: $1 == '$2'"
+                      fi
+                  }
+
+                  assert "steps.changed.outputs.has-changed" "true" "${CHANGED_HAS_CHANGED}"
+                  assert "steps.changed.outputs.total-size" "5050" "${CHANGED_TOTAL_SIZE}"
+                  assert "steps.same.outputs.has-changed" "false" "${SAME_HAS_CHANGED}"
+                  assert "steps.same.outputs.total-size" "5050" "${SAME_TOTAL_SIZE}"
+                  assert "steps.nobase.outputs.has-changed" "false" "${NOBASE_HAS_CHANGED}"
+                  assert "steps.nobase.outputs.total-size" "5050" "${NOBASE_TOTAL_SIZE}"
+
+                  if [[ "${failed}" -ne 0 ]]; then
+                      echo "::error::Self-test failed: one or more outputs did not match the fixture expectations (see above)."
+                      exit 1
+                  fi

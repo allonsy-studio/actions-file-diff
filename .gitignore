@@ -60,8 +60,8 @@ web_modules/
 .env.*
 !.env.example
 
-# parcel-bundler cache (https://parceljs.org/)
-dist
+# Build output is committed (dist/index.cjs is what the action runs), so it is
+# deliberately NOT ignored here.
 
 # Cache files
 .cache

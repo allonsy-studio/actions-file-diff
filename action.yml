@@ -26,16 +26,32 @@ inputs:
         required: false
         default: "true"
     comment-header:
-        description: Comment header to be used in the PR comment.
+        description: Comment header to be used in the PR comment. Also identifies the sticky comment, so distinct headers allow multiple instances to coexist.
         required: false
         default: "## File metrics"
+    build-dir:
+        description: Path segment separating a package from its built output. Files are grouped into a package named by the directory immediately before this segment; the readable filename is the path after it.
+        required: false
+        default: "dist"
+    main-file:
+        description: Fallback filename (relative to the build dir) treated as a package's main file.
+        required: false
+        default: "index.css"
+    read-package-json:
+        description: When true, use the `main` field of a package's package.json (relative to the build dir) as its main file instead of `main-file`.
+        required: false
+        default: "true"
+    extensions:
+        description: Optional list (multiline or comma-separated) of base extensions to report and count, e.g. `css, js`. `.map`, `.gz` and `.min` layers are stripped before comparing. Empty reports all files.
+        required: false
+        default: ""
 
 outputs:
     has-changed:
-        description: True if the overall file size has changed.
+        description: '"true" when the head total differs from the base total; "false" otherwise, including when there is no base.'
     total-size:
-        description: Total size of the files in bytes.
+        description: Integer byte total of the head, summing all reported files and using the minified size where one exists.
 
 runs:
     using: node24
-    main: index.js
+    main: dist/index.cjs
