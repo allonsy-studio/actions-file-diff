@@ -28245,7 +28245,7 @@ async function fetchFilesAndSizes(rootPath, patterns = [], { core, required = tr
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var DEFAULT_BUILD_DIR = "dist";
-var DEFAULT_MAIN_FILE = "index.css";
+var DEFAULT_MAIN_FILE = "index.js";
 var segments = (filepath) => String(filepath ?? "").split(/[\\/]+/).filter(Boolean);
 var basename5 = (filepath) => segments(filepath).at(-1) ?? "";
 function escapeRegExp(value) {

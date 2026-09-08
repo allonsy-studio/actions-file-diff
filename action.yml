@@ -36,7 +36,7 @@ inputs:
     main-file:
         description: Fallback filename (relative to the build dir) treated as a package's main file.
         required: false
-        default: "index.css"
+        default: "index.js"
     read-package-json:
         description: When true, use the `main` field of a package's package.json (relative to the build dir) as its main file instead of `main-file`.
         required: false

@@ -15,7 +15,7 @@ import { bytesToSize } from "./utilities.js";
 export const DEFAULT_BUILD_DIR = "dist";
 
 /** Default main file (relative to the build dir) when package.json has none. */
-export const DEFAULT_MAIN_FILE = "index.css";
+export const DEFAULT_MAIN_FILE = "index.js";
 
 /**
  * @typedef {object} FileEntry

@@ -200,7 +200,7 @@ describe("resolveMainFile", () => {
 
 	it("ignores package.json when read-package-json is false", () => {
 		writePackage("packages/foo", JSON.stringify({ main: "dist/other.css" }));
-		expect(resolveMainFile({ rootPath: root, packageDir: "packages/foo", readPackageJson: false })).toBe("index.css");
+		expect(resolveMainFile({ rootPath: root, packageDir: "packages/foo", readPackageJson: false })).toBe("index.js");
 	});
 
 	it("falls back when package.json is missing or has no string main", () => {
@@ -212,7 +212,7 @@ describe("resolveMainFile", () => {
 	it("warns and falls back on malformed package.json", () => {
 		writePackage("packages/foo", "{ not json");
 		const core = { warning: jest.fn() };
-		expect(resolveMainFile({ rootPath: root, packageDir: "packages/foo", core })).toBe("index.css");
+		expect(resolveMainFile({ rootPath: root, packageDir: "packages/foo", core })).toBe("index.js");
 		expect(core.warning).toHaveBeenCalledTimes(1);
 	});
 });
