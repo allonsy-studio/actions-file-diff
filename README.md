@@ -37,42 +37,139 @@
 
 ## Usage
 
+The action measures files that already exist on disk and compares the head tree against a base tree. It never checks out or builds anything itself, so the caller is responsible for producing both trees before running it. This keeps the action independent of your package manager and build tooling.
+
+A complete pull request workflow that builds the head, builds the base into a second directory, and posts the comparison as a sticky comment:
+
 ```yaml
-- uses: allonsy-studio/actions-file-diff@v1
-  with:
-      head-path: ${{ github.workspace }}/packages
-      base-path: /tmp/main-checkout/packages
-      file-glob-pattern: "**/dist/**"
-      comment-header: "## File metrics"
+name: File metrics
+
+on:
+    pull_request:
+
+permissions:
+    contents: read
+    pull-requests: write # required to post and update the PR comment
+
+jobs:
+    file-diff:
+        runs-on: ubuntu-latest
+        steps:
+            # (a) Check out and build the pull request head.
+            - uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: npm
+            - run: npm ci
+            - run: npm run build
+
+            # (b) Check out and build the base ref into a second directory.
+            - uses: actions/checkout@v6
+              with:
+                  ref: ${{ github.base_ref }}
+                  path: base
+                  persist-credentials: false
+            - run: npm ci
+              working-directory: base
+            - run: npm run build
+              working-directory: base
+
+            # (c) Compare the two trees and report on the pull request.
+            - uses: allonsy-studio/actions-file-diff@v1
+              with:
+                  head-path: ${{ github.workspace }}
+                  base-path: ${{ github.workspace }}/base
+                  # The base checkout lives inside the workspace, so exclude it
+                  # (and installed dependencies) from the head tree.
+                  file-glob-pattern: |
+                      **/dist/**
+                      !base/**
+                      !**/node_modules/**
 ```
+
+If `base-path` is omitted, or the directory does not exist, the action reports head totals only and `has-changed` is always `"false"`.
 
 ## Inputs
 
-| Name                | Required | Default                   | Description                                                            |
-| ------------------- | -------- | ------------------------- | ---------------------------------------------------------------------- |
-| `head-path`         | no       | `${{ github.workspace }}` | Path to the head branch's files.                                       |
-| `base-path`         | no       | —                         | Path to the base branch's files. If omitted, only reports head totals. |
-| `token`             | no       | `${{ github.token }}`     | GitHub token used to post the PR comment.                              |
-| `file-glob-pattern` | no       | `**/dist/**`              | Glob pattern (newline-separated for multiple) used to select files.    |
-| `comment`           | no       | `"true"`                  | Whether to post/update a PR comment.                                   |
-| `comment-header`    | no       | `## File metrics`         | Header line used to identify the sticky comment.                       |
+| Name                | Required | Default                   | Description                                                                                                                                                                                                                                                            |
+| ------------------- | -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `head-path`         | no       | `${{ github.workspace }}` | Directory containing the head (pull request) tree to measure.                                                                                                                                                                                                          |
+| `base-path`         | no       | —                         | Directory containing the base tree to compare against. If omitted or missing, only head totals are reported.                                                                                                                                                           |
+| `token`             | no       | `${{ github.token }}`     | Token used to post the pull request comment.                                                                                                                                                                                                                           |
+| `file-glob-pattern` | no       | `**/dist/**`              | Glob pattern(s) selecting the files to measure, resolved relative to `head-path` and `base-path` via [`@actions/glob`](https://github.com/actions/toolkit/tree/main/packages/glob). Newline-separated for multiple. Lines starting with `!` exclude, e.g. `!**/*.map`. |
+| `build-dir`         | no       | `dist`                    | The path segment that separates a package from its built output. Files are grouped into a package named by the directory before this segment; the reported filename is the path after it.                                                                              |
+| `main-file`         | no       | `index.js`                | Filename, relative to the build dir, treated as the package's main file. Used for the summary table.                                                                                                                                                                   |
+| `read-package-json` | no       | `"true"`                  | When `"true"`, a package's `package.json` `main` field overrides `main-file` for that package.                                                                                                                                                                         |
+| `extensions`        | no       | —                         | Newline- or comma-separated list of base extensions to report, e.g. `css, js`. Empty reports all files. The `.min`, `.gz` and `.map` layers are stripped before matching, so `index.min.css.gz` counts as `css`.                                                       |
+| `comment`           | no       | `"true"`                  | Whether to post or update the pull request comment.                                                                                                                                                                                                                    |
+| `comment-header`    | no       | `## File metrics`         | First line of the comment. Also used to derive the hidden marker that keeps the comment sticky across runs, so use distinct headers if you run the action more than once per pull request.                                                                             |
 
 ## Outputs
 
-| Name          | Description                                 |
-| ------------- | ------------------------------------------- |
-| `has-changed` | `"true"` if overall size differs from base. |
-| `total-size`  | Total head-branch size in bytes.            |
+| Name          | Description                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| `has-changed` | `"true"` when the head total differs from the base total. Always `"false"` when there is no base. |
+| `total-size`  | Head total in bytes.                                                                              |
+
+### How sizes are counted
+
+- Files ending in `.map`, `.gz`, or `.min.*` are not reported as rows themselves; they appear as columns on their parent file's row.
+- Each reported file counts as its minified sibling's size when one exists in the same tree (for example `index.css` counts as the size of `index.min.css`), otherwise its own size.
+- `total-size` is the sum of those per-file sizes across all reported files.
+- Human-readable sizes use 1024-byte units (`1 KB` = 1024 bytes).
+
+### Examples
+
+Single-package repository whose build output lives in `build/`:
+
+```yaml
+- uses: allonsy-studio/actions-file-diff@v1
+  with:
+      base-path: ${{ github.workspace }}/base
+      file-glob-pattern: |
+          **/build/**
+          !base/**
+          !**/node_modules/**
+      build-dir: build
+      main-file: main.js
+```
+
+CSS-only report:
+
+```yaml
+- uses: allonsy-studio/actions-file-diff@v1
+  with:
+      base-path: ${{ github.workspace }}/base
+      extensions: css
+```
+
+Excluding sourcemaps with a `!` pattern:
+
+```yaml
+- uses: allonsy-studio/actions-file-diff@v1
+  with:
+      base-path: ${{ github.workspace }}/base
+      file-glob-pattern: |
+          **/dist/**
+          !**/*.map
+          !base/**
+```
 
 ## Development
 
-This repo deliberately stays simple — no TypeScript, no bundling. Tooling is configured locally with standard presets:
+Plain JavaScript, no TypeScript. The source under `src/` is bundled with esbuild into `dist/index.cjs`, which is what `action.yml` runs; the bundle is committed so consumers get the action's dependencies without an install step.
 
 ```sh
 yarn lint      # eslint (flat config, @eslint/js recommended + prettier)
 yarn format    # prettier --write, then eslint --fix
 yarn test      # jest, JS-only
+yarn build     # esbuild -> dist/index.cjs (committed; CI fails if stale)
 ```
+
+Run `yarn build` and commit `dist/index.cjs` whenever `src/` or a dependency changes. The self-test workflow (`.github/workflows/self-test.yml`) rebuilds the bundle, fails if the committed copy is stale, and runs the action against a fixture tree (`scripts/make-fixture.sh`) on every pull request, asserting the `has-changed` and `total-size` outputs.
 
 <!-- weaver:contribution:START -->
 <!-- auto-generated by Weaver — do not edit between these markers -->
