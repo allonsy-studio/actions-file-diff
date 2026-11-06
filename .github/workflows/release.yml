@@ -16,17 +16,24 @@ jobs:
             # Releases are changeset-driven, not commit-driven — skip the local
             # git hooks when the changesets action commits the version bump.
             HUSKY: 0
-            GH_TOKEN: ${{ secrets.GH_TOKEN }}
-            GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
         steps:
+            - name: Create GitHub App token
+              id: app-token
+              uses: actions/create-github-app-token@v3
+              with:
+                  app-id: ${{ secrets.APP_ID }}
+                  private-key: ${{ secrets.APP_PRIVATE_KEY }}
+                  permission-contents: write
+                  permission-pull-requests: write
+
             - name: Check out code
               uses: actions/checkout@v7
               with:
                   # Full history + tags to detect prior releases, and persist the
-                  # PAT so the publish step can push tags without re-auth.
+                  # app token so the publish step can push tags without re-auth.
                   fetch-depth: 0
-                  token: ${{ secrets.GH_TOKEN }}
+                  token: ${{ steps.app-token.outputs.token }}
 
             - name: Enable corepack
               run: corepack enable
@@ -55,11 +62,16 @@ jobs:
                   version: yarn changeset version
                   title: "chore(release): version packages"
                   commit: "chore(release): version packages"
+                  commitMode: github-api
+              env:
+                  GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
             # Runs on the push that merges the version PR. The npm and tag checks
             # are independent so the step is a safe no-op on every other push.
             - name: Publish
               if: steps.changesets.outputs.hasChangesets == 'false'
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
               run: |
                   PKG="$(node -p "require('./package.json').name")"
                   VERSION="$(node -p "require('./package.json').version")"
