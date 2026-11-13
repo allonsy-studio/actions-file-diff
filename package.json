@@ -28,16 +28,16 @@
 	],
 	"scripts": {
 		"build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=cjs --outfile=dist/index.cjs --legal-comments=none --log-level=warning",
-		"changeset": "changeset",
+		"changeset": "opx release add",
 		"ci": "yarn lint && yarn build && yarn test",
 		"coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
 		"format": "prettier --write . && yarn lint --fix",
 		"lint": "eslint --no-error-on-unmatched-pattern --no-warn-ignored --cache '**/*'",
 		"precommit": "lint-staged",
 		"prepare": "husky && envoy || true",
-		"release": "changeset publish",
+		"release": "yarn build && opx release publish",
 		"test": "NODE_OPTIONS=--experimental-vm-modules jest",
-		"version-packages": "changeset version"
+		"version": "opx release version && yarn install --mode update-lockfile"
 	},
 	"dependencies": {
 		"@actions/core": "^3.0.1",
@@ -46,8 +46,8 @@
 	},
 	"devDependencies": {
 		"@allons-y/envoy": "^1.1.0",
-		"@changesets/cli": "^2.31.0",
-		"@changesets/get-github-info": "^0.8.0",
+		"@allons-y/opx-cli": "^0.2.0",
+		"@allons-y/opx-release": "^0.1.1",
 		"@commitlint/cli": "^21.1.0",
 		"@commitlint/config-conventional": "^21.1.0",
 		"@eslint/compat": "^2.1.0",
