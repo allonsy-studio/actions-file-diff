@@ -35,7 +35,7 @@
 		"lint": "eslint --no-error-on-unmatched-pattern --no-warn-ignored --cache '**/*'",
 		"precommit": "lint-staged",
 		"prepare": "husky && envoy || true",
-		"release": "opx release publish",
+		"release": "yarn build && opx release publish",
 		"test": "NODE_OPTIONS=--experimental-vm-modules jest",
 		"version": "opx release version && yarn install --mode update-lockfile"
 	},
