@@ -1,0 +1,255 @@
+/* Styles for the published visual diff page (render.js → renderHtml). Bundled as text. */
+
+/* ---- Tokens ------------------------------------------------------------ */
+:root {
+	color-scheme: light dark;
+	--bg: #fff;
+	--fg: #1f2328;
+	--muted: #59636e;
+	--line: #d1d9e0;
+	--surface: color-mix(in srgb, var(--line) 25%, transparent);
+	--add-bg: #dafbe1;
+	--add-fg: #1a7f37;
+	--del-bg: #ffebe9;
+	--del-fg: #d1242f;
+	--hunk-bg: #ddf4ff;
+	--base: #8c959f;
+	--head: #0969da;
+	--radius: 6px;
+	--font: 14px/1.5 system-ui, sans-serif;
+	--mono: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0d1117;
+		--fg: #e6edf3;
+		--muted: #9198a1;
+		--line: #3d444d;
+		--add-bg: #12261e;
+		--add-fg: #3fb950;
+		--del-bg: #25171c;
+		--del-fg: #f85149;
+		--hunk-bg: #121d2f;
+		--base: #656c76;
+		--head: #4493f8;
+	}
+}
+
+/* ---- Page -------------------------------------------------------------- */
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 16px;
+	background: var(--bg);
+	color: var(--fg);
+	font: var(--font);
+}
+
+main {
+	max-width: 1200px;
+	margin: 0 auto;
+}
+
+h1 {
+	font-size: 1.4rem;
+	margin: 0 0 4px;
+}
+
+.meta-line {
+	color: var(--muted);
+	margin: 0 0 12px;
+}
+
+.stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 20px;
+	margin: 0 0 16px;
+	padding: 0;
+	list-style: none;
+}
+
+/* ---- Tabs -------------------------------------------------------------- */
+[role="tablist"] {
+	display: flex;
+	gap: 4px;
+	border-bottom: 1px solid var(--line);
+	overflow-x: auto;
+}
+
+[role="tab"] {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 1px solid transparent;
+	border-bottom: none;
+	border-radius: var(--radius) var(--radius) 0 0;
+	padding: 6px 12px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+[role="tab"][aria-selected="true"] {
+	border-color: var(--line);
+	background: var(--bg);
+	margin-bottom: -1px;
+	font-weight: 600;
+}
+
+[role="tabpanel"] {
+	padding: 16px 0;
+	overflow-x: auto;
+}
+
+/* ---- Sizes tab --------------------------------------------------------- */
+table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+th,
+td {
+	text-align: left;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--line);
+	vertical-align: top;
+}
+
+.chart {
+	min-width: 160px;
+}
+
+.bar {
+	height: 8px;
+	border-radius: 4px;
+	margin: 2px 0;
+}
+
+.bar.base,
+.key.base {
+	background: var(--base);
+}
+
+.bar.head,
+.key.head {
+	background: var(--head);
+}
+
+.key {
+	display: inline-block;
+	padding: 0 6px;
+	border-radius: 4px;
+	color: #fff;
+	font-weight: 400;
+	font-size: 0.8em;
+}
+
+/* ---- Line diffs tab ---------------------------------------------------- */
+details.file {
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	margin: 0 0 12px;
+	overflow: hidden;
+}
+
+details.file > summary {
+	padding: 6px 10px;
+	cursor: pointer;
+	background: var(--surface);
+}
+
+.diff {
+	font: var(--mono);
+}
+
+.diff td {
+	border: 0;
+	padding: 0 8px;
+	white-space: pre;
+}
+
+/* Line-number gutters. */
+.diff td:nth-child(-n + 2) {
+	color: var(--muted);
+	text-align: right;
+	user-select: none;
+	width: 1%;
+}
+
+.diff tr.add {
+	background: var(--add-bg);
+}
+
+.diff tr.del {
+	background: var(--del-bg);
+}
+
+.diff tr.hunk,
+.diff tr.meta {
+	background: var(--hunk-bg);
+	color: var(--muted);
+}
+
+span.add {
+	color: var(--add-fg);
+}
+
+span.del {
+	color: var(--del-fg);
+}
+
+.status {
+	font-size: 0.8em;
+	padding: 0 6px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+}
+
+.status.added {
+	border-color: var(--add-fg);
+	color: var(--add-fg);
+}
+
+.status.removed {
+	border-color: var(--del-fg);
+	color: var(--del-fg);
+}
+
+.note {
+	padding: 8px 10px;
+	margin: 0;
+	color: var(--muted);
+}
+
+/* ---- Visual diffs tab -------------------------------------------------- */
+.pair {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 12px;
+}
+
+figure {
+	margin: 0;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	padding: 8px;
+	text-align: center;
+}
+
+/* Checkerboard behind images so transparency is visible. */
+figure img {
+	max-width: 100%;
+	height: auto;
+	background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+figure.empty {
+	color: var(--muted);
+	display: grid;
+	place-items: center;
+	min-height: 80px;
+}

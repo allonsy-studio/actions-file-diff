@@ -3,10 +3,11 @@ const isCI = !!process.env.CI;
 /** @type {import('jest').Config} */
 export default {
 	clearMocks: true,
-	moduleFileExtensions: ["js"],
+	moduleFileExtensions: ["js", "css"],
 	testEnvironment: "node",
 	testMatch: ["**/src/*.test.js"],
-	transform: {},
+	// Mirror the esbuild text loader for the report stylesheet.
+	transform: { "\\.css$": "<rootDir>/scripts/jest-text-transform.cjs" },
 	verbose: true,
 	// Unit-test the logic modules. The action
 	// entry shell (index.js) is exercised by the self-test workflow in

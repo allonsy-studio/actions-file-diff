@@ -6,14 +6,12 @@
  * of the License at <http://www.apache.org/licenses/LICENSE-2.0>
  */
 
-import { readFileSync } from "node:fs";
-
 import * as core from "@actions/core";
 import { context, getOctokit } from "@actions/github";
 
-import { collectChanges, DEFAULT_MAX_DIFF_SIZE, MAX_IMAGE_SIZE } from "./changes.js";
+import { collectChanges, DEFAULT_MAX_DIFF_SIZE } from "./changes.js";
 import { DEFAULT_REPORT_BRANCH, publishToBranch, reportDir, reportUrl } from "./publish.js";
-import { renderHtml, renderStats, renderSummaryMarkdown, sizeRows, SUMMARY_BUDGET } from "./render.js";
+import { renderStats, reportFiles, renderSummaryMarkdown, sizeRows, SUMMARY_BUDGET } from "./render.js";
 import { buildReport, commentMarker, DEFAULT_BUILD_DIR, DEFAULT_MAIN_FILE } from "./report.js";
 import { addComment, fetchFilesAndSizes } from "./utilities.js";
 
@@ -42,9 +40,6 @@ function runUrl() {
 	return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}${attempt}`;
 }
 
-/** Encodes each path segment for use in a relative URL. */
-const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
-
 async function run() {
 	const token = core.getInput("token");
 	const headPath = core.getInput("head-path");
@@ -65,11 +60,11 @@ async function run() {
 	if (!Number.isFinite(maxDiffSize) || maxDiffSize < 0) throw new Error(`Invalid max-diff-size "${core.getInput("max-diff-size")}"; expected a byte count.`);
 
 	const pullRequest = context.payload.pull_request;
-	const { owner, repo } = context.repo;
 	const dir = reportDir({ pullNumber: pullRequest?.number, sha: pullRequest?.head?.sha ?? context.sha });
 
 	// A closed pull request only needs its published report removed.
 	if (visualDiff === "branch" && pullRequest && context.payload.action === "closed") {
+		const { owner, repo } = context.repo;
 		const sha = await publishToBranch({ octokit: getOctokit(token), owner, repo, branch: reportBranch, dir, files: [], message: `chore: remove file diff report for #${pullRequest.number}` });
 		core.info(sha ? `Removed ${dir}/ from ${reportBranch}.` : `Nothing to remove for ${dir}/ on ${reportBranch}.`);
 		return;
@@ -93,23 +88,9 @@ async function run() {
 		if (visualDiff === "branch") {
 			try {
 				const octokit = getOctokit(token);
-				const imageUrls = new Map();
-				const files = [];
-				changes.images.forEach((image) => {
-					const urls = {};
-					[
-						["head", image.headPath, image.headByteSize],
-						["base", image.basePath, image.baseByteSize],
-					].forEach(([side, path, size]) => {
-						if (!path || size > MAX_IMAGE_SIZE) return;
-						files.push({ path: `images/${side}/${image.file}`, content: readFileSync(path) });
-						urls[side] = `images/${side}/${encodePath(image.file)}`;
-					});
-					imageUrls.set(image.file, urls);
-				});
+				const { owner, repo } = context.repo;
 				const where = pullRequest ? `${owner}/${repo}#${pullRequest.number}` : `${owner}/${repo}`;
-				const html = renderHtml({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, imageUrls, context: `${where} @ ${(pullRequest?.head?.sha ?? context.sha ?? "").slice(0, 7)}` });
-				files.push({ path: "index.html", content: html });
+				const files = reportFiles({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, context: `${where} @ ${(pullRequest?.head?.sha ?? context.sha ?? "").slice(0, 7)}` });
 
 				await publishToBranch({ octokit, owner, repo, branch: reportBranch, dir, files, message: `chore: file diff report for ${pullRequest ? `#${pullRequest.number}` : dir}` });
 				link = await reportUrl({ octokit, owner, repo, dir, pagesUrl });

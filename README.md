@@ -223,7 +223,16 @@ yarn lint      # eslint (flat config, @eslint/js recommended + prettier)
 yarn format    # prettier --write, then eslint --fix
 yarn test      # jest, JS-only
 yarn build     # esbuild -> dist/index.cjs (committed; CI fails if stale)
+yarn preview   # render the visual diff page from a sample fixture into preview/
+yarn preview --serve   # serve it at http://localhost:4173 with live reload
 ```
+
+### Styling the visual diff page
+
+- Styles live in `src/report-page.css`. They're bundled as text (esbuild `--loader:.css=text`), so the published page stays a single self-contained file.
+- Colors, radius and fonts are custom properties on `:root`, with dark values in a `prefers-color-scheme` block.
+- `yarn preview --serve` re-renders on any change under `src/`. The sample data (`scripts/preview-fixture.js`) covers modified, added and removed files, a removed package, a binary file, a file over `max-diff-size`, and PNG/SVG image changes.
+- The preview has two variants, `/base/` and `/no-base/`. Each also writes the `comment.md` and `summary.md` the action would post.
 
 Run `yarn build` and commit `dist/index.cjs` whenever `src/` or a dependency changes. The self-test workflow (`.github/workflows/self-test.yml`) rebuilds the bundle, fails if the committed copy is stale, and runs the action against a fixture tree (`scripts/make-fixture.sh`) on every pull request, asserting the `has-changed` and `total-size` outputs.
 

@@ -30,7 +30,7 @@
 		"action.yml"
 	],
 	"scripts": {
-		"build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=cjs --outfile=dist/index.cjs --legal-comments=none --log-level=warning",
+		"build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=cjs --outfile=dist/index.cjs --legal-comments=none --log-level=warning --loader:.css=text",
 		"changeset": "opx release add",
 		"ci": "yarn lint && yarn build && yarn test",
 		"coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
@@ -38,6 +38,7 @@
 		"lint": "eslint --no-error-on-unmatched-pattern --no-warn-ignored --cache '**/*'",
 		"precommit": "lint-staged",
 		"prepare": "husky && envoy || true",
+		"preview": "node scripts/preview.js",
 		"release": "yarn build && opx release publish",
 		"test": "NODE_OPTIONS=--experimental-vm-modules jest",
 		"version": "opx release version && yarn install --mode update-lockfile"

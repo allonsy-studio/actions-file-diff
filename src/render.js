@@ -6,6 +6,10 @@
  * of the License at <http://www.apache.org/licenses/LICENSE-2.0>
  */
 
+import { readFileSync } from "node:fs";
+
+import { MAX_IMAGE_SIZE } from "./changes.js";
+import css from "./report-page.css";
 import { isReportedFile, printChange, printPercentChange } from "./report.js";
 import { bytesToSize } from "./utilities.js";
 
@@ -253,24 +257,7 @@ export function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = 
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 <style>
-:root{color-scheme:light dark;--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--add:#dafbe1;--del:#ffebe9;--hunk:#ddf4ff;--base:#8c959f;--head:#0969da}
-@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#3d444d;--add:#12261e;--del:#25171c;--hunk:#121d2f;--base:#656c76;--head:#4493f8}}
-*{box-sizing:border-box}body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
-main{max-width:1200px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px}.meta-line{color:var(--muted);margin:0 0 12px}
-.stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 16px;padding:0;list-style:none}
-[role=tablist]{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
-[role=tab]{font:inherit;color:inherit;background:none;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;padding:6px 12px;cursor:pointer;white-space:nowrap}
-[role=tab][aria-selected=true]{border-color:var(--line);background:var(--bg);margin-bottom:-1px;font-weight:600}
-[role=tabpanel]{padding:16px 0;overflow-x:auto}
-table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-.chart{min-width:160px}.bar{height:8px;border-radius:4px;margin:2px 0}.bar.base{background:var(--base)}.bar.head{background:var(--head)}
-.key{display:inline-block;padding:0 6px;border-radius:4px;color:#fff;font-weight:400;font-size:.8em}.key.base{background:var(--base)}.key.head{background:var(--head)}
-details.file{border:1px solid var(--line);border-radius:6px;margin:0 0 12px;overflow:hidden}details.file>summary{padding:6px 10px;cursor:pointer;background:color-mix(in srgb,var(--line) 25%,transparent)}
-.diff{font:12px/1.45 ui-monospace,monospace}.diff td{border:0;padding:0 8px;white-space:pre}.diff td:nth-child(-n+2){color:var(--muted);text-align:right;user-select:none;width:1%}
-.diff tr.add{background:var(--add)}.diff tr.del{background:var(--del)}.diff tr.hunk,.diff tr.meta{background:var(--hunk);color:var(--muted)}
-span.add{color:#1a7f37}span.del{color:#d1242f}.status{font-size:.8em;padding:0 6px;border:1px solid var(--line);border-radius:10px}.note{padding:8px 10px;margin:0;color:var(--muted)}
-.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}figure{margin:0;border:1px solid var(--line);border-radius:6px;padding:8px;text-align:center}
-figure img{max-width:100%;height:auto;background:repeating-conic-gradient(#8884 0 25%,transparent 0 50%) 0 0/16px 16px}figure.empty{color:var(--muted);display:grid;place-items:center;min-height:80px}
+${css}
 </style>
 </head>
 <body>
@@ -309,4 +296,34 @@ ${tabs.map(([id, label, html]) => `<section role="tabpanel" id="panel-${id}" ari
 </body>
 </html>
 `;
+}
+
+/** Encodes each path segment for use in a relative URL. */
+const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
+
+/**
+ * Files for a published report: `index.html` plus changed images (up to
+ * MAX_IMAGE_SIZE each) under `images/head/` and `images/base/`.
+ * @param {Omit<Parameters<typeof renderHtml>[0], "imageUrls">} options
+ * @returns {import("./publish.js").ReportFile[]}
+ */
+export function reportFiles(options) {
+	const files = [];
+	const imageUrls = new Map();
+
+	options.changes.images.forEach((image) => {
+		const urls = {};
+		[
+			["head", image.headPath, image.headByteSize],
+			["base", image.basePath, image.baseByteSize],
+		].forEach(([side, path, size]) => {
+			if (!path || size > MAX_IMAGE_SIZE) return;
+			files.push({ path: `images/${side}/${image.file}`, content: readFileSync(path) });
+			urls[side] = `images/${side}/${encodePath(image.file)}`;
+		});
+		imageUrls.set(image.file, urls);
+	});
+
+	files.push({ path: "index.html", content: renderHtml({ ...options, imageUrls }) });
+	return files;
 }

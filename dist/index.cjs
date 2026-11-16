@@ -19651,9 +19651,6 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.js
-var import_node_fs4 = require("node:fs");
-
 // node_modules/@actions/core/lib/core.js
 var core_exports = {};
 __export(core_exports, {
@@ -28978,6 +28975,12 @@ async function publishToBranch({ octokit, owner, repo, branch, dir, files, messa
 }
 
 // src/render.js
+var import_node_fs4 = require("node:fs");
+
+// src/report-page.css
+var report_page_default = '/* Styles for the published visual diff page (render.js \u2192 renderHtml). Bundled as text. */\n\n/* ---- Tokens ------------------------------------------------------------ */\n:root {\n	color-scheme: light dark;\n	--bg: #fff;\n	--fg: #1f2328;\n	--muted: #59636e;\n	--line: #d1d9e0;\n	--surface: color-mix(in srgb, var(--line) 25%, transparent);\n	--add-bg: #dafbe1;\n	--add-fg: #1a7f37;\n	--del-bg: #ffebe9;\n	--del-fg: #d1242f;\n	--hunk-bg: #ddf4ff;\n	--base: #8c959f;\n	--head: #0969da;\n	--radius: 6px;\n	--font: 14px/1.5 system-ui, sans-serif;\n	--mono: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;\n}\n\n@media (prefers-color-scheme: dark) {\n	:root {\n		--bg: #0d1117;\n		--fg: #e6edf3;\n		--muted: #9198a1;\n		--line: #3d444d;\n		--add-bg: #12261e;\n		--add-fg: #3fb950;\n		--del-bg: #25171c;\n		--del-fg: #f85149;\n		--hunk-bg: #121d2f;\n		--base: #656c76;\n		--head: #4493f8;\n	}\n}\n\n/* ---- Page -------------------------------------------------------------- */\n* {\n	box-sizing: border-box;\n}\n\nbody {\n	margin: 0;\n	padding: 16px;\n	background: var(--bg);\n	color: var(--fg);\n	font: var(--font);\n}\n\nmain {\n	max-width: 1200px;\n	margin: 0 auto;\n}\n\nh1 {\n	font-size: 1.4rem;\n	margin: 0 0 4px;\n}\n\n.meta-line {\n	color: var(--muted);\n	margin: 0 0 12px;\n}\n\n.stats {\n	display: flex;\n	flex-wrap: wrap;\n	gap: 8px 20px;\n	margin: 0 0 16px;\n	padding: 0;\n	list-style: none;\n}\n\n/* ---- Tabs -------------------------------------------------------------- */\n[role="tablist"] {\n	display: flex;\n	gap: 4px;\n	border-bottom: 1px solid var(--line);\n	overflow-x: auto;\n}\n\n[role="tab"] {\n	font: inherit;\n	color: inherit;\n	background: none;\n	border: 1px solid transparent;\n	border-bottom: none;\n	border-radius: var(--radius) var(--radius) 0 0;\n	padding: 6px 12px;\n	cursor: pointer;\n	white-space: nowrap;\n}\n\n[role="tab"][aria-selected="true"] {\n	border-color: var(--line);\n	background: var(--bg);\n	margin-bottom: -1px;\n	font-weight: 600;\n}\n\n[role="tabpanel"] {\n	padding: 16px 0;\n	overflow-x: auto;\n}\n\n/* ---- Sizes tab --------------------------------------------------------- */\ntable {\n	border-collapse: collapse;\n	width: 100%;\n}\n\nth,\ntd {\n	text-align: left;\n	padding: 4px 8px;\n	border-bottom: 1px solid var(--line);\n	vertical-align: top;\n}\n\n.chart {\n	min-width: 160px;\n}\n\n.bar {\n	height: 8px;\n	border-radius: 4px;\n	margin: 2px 0;\n}\n\n.bar.base,\n.key.base {\n	background: var(--base);\n}\n\n.bar.head,\n.key.head {\n	background: var(--head);\n}\n\n.key {\n	display: inline-block;\n	padding: 0 6px;\n	border-radius: 4px;\n	color: #fff;\n	font-weight: 400;\n	font-size: 0.8em;\n}\n\n/* ---- Line diffs tab ---------------------------------------------------- */\ndetails.file {\n	border: 1px solid var(--line);\n	border-radius: var(--radius);\n	margin: 0 0 12px;\n	overflow: hidden;\n}\n\ndetails.file > summary {\n	padding: 6px 10px;\n	cursor: pointer;\n	background: var(--surface);\n}\n\n.diff {\n	font: var(--mono);\n}\n\n.diff td {\n	border: 0;\n	padding: 0 8px;\n	white-space: pre;\n}\n\n/* Line-number gutters. */\n.diff td:nth-child(-n + 2) {\n	color: var(--muted);\n	text-align: right;\n	user-select: none;\n	width: 1%;\n}\n\n.diff tr.add {\n	background: var(--add-bg);\n}\n\n.diff tr.del {\n	background: var(--del-bg);\n}\n\n.diff tr.hunk,\n.diff tr.meta {\n	background: var(--hunk-bg);\n	color: var(--muted);\n}\n\nspan.add {\n	color: var(--add-fg);\n}\n\nspan.del {\n	color: var(--del-fg);\n}\n\n.status {\n	font-size: 0.8em;\n	padding: 0 6px;\n	border: 1px solid var(--line);\n	border-radius: 10px;\n}\n\n.status.added {\n	border-color: var(--add-fg);\n	color: var(--add-fg);\n}\n\n.status.removed {\n	border-color: var(--del-fg);\n	color: var(--del-fg);\n}\n\n.note {\n	padding: 8px 10px;\n	margin: 0;\n	color: var(--muted);\n}\n\n/* ---- Visual diffs tab -------------------------------------------------- */\n.pair {\n	display: grid;\n	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));\n	gap: 12px;\n}\n\nfigure {\n	margin: 0;\n	border: 1px solid var(--line);\n	border-radius: var(--radius);\n	padding: 8px;\n	text-align: center;\n}\n\n/* Checkerboard behind images so transparency is visible. */\nfigure img {\n	max-width: 100%;\n	height: auto;\n	background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 16px 16px;\n}\n\nfigure.empty {\n	color: var(--muted);\n	display: grid;\n	place-items: center;\n	min-height: 80px;\n}\n';
+
+// src/render.js
 var SUMMARY_BUDGET = 900 * 1024;
 var BAR_WIDTH = 20;
 var STATUS_LABEL = { added: "\u{1F195} added", removed: "\u{1F6A8} removed", modified: "\u270F\uFE0F modified" };
@@ -29108,24 +29111,7 @@ function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = /* @__P
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 <style>
-:root{color-scheme:light dark;--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--add:#dafbe1;--del:#ffebe9;--hunk:#ddf4ff;--base:#8c959f;--head:#0969da}
-@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#3d444d;--add:#12261e;--del:#25171c;--hunk:#121d2f;--base:#656c76;--head:#4493f8}}
-*{box-sizing:border-box}body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
-main{max-width:1200px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px}.meta-line{color:var(--muted);margin:0 0 12px}
-.stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 16px;padding:0;list-style:none}
-[role=tablist]{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
-[role=tab]{font:inherit;color:inherit;background:none;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;padding:6px 12px;cursor:pointer;white-space:nowrap}
-[role=tab][aria-selected=true]{border-color:var(--line);background:var(--bg);margin-bottom:-1px;font-weight:600}
-[role=tabpanel]{padding:16px 0;overflow-x:auto}
-table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-.chart{min-width:160px}.bar{height:8px;border-radius:4px;margin:2px 0}.bar.base{background:var(--base)}.bar.head{background:var(--head)}
-.key{display:inline-block;padding:0 6px;border-radius:4px;color:#fff;font-weight:400;font-size:.8em}.key.base{background:var(--base)}.key.head{background:var(--head)}
-details.file{border:1px solid var(--line);border-radius:6px;margin:0 0 12px;overflow:hidden}details.file>summary{padding:6px 10px;cursor:pointer;background:color-mix(in srgb,var(--line) 25%,transparent)}
-.diff{font:12px/1.45 ui-monospace,monospace}.diff td{border:0;padding:0 8px;white-space:pre}.diff td:nth-child(-n+2){color:var(--muted);text-align:right;user-select:none;width:1%}
-.diff tr.add{background:var(--add)}.diff tr.del{background:var(--del)}.diff tr.hunk,.diff tr.meta{background:var(--hunk);color:var(--muted)}
-span.add{color:#1a7f37}span.del{color:#d1242f}.status{font-size:.8em;padding:0 6px;border:1px solid var(--line);border-radius:10px}.note{padding:8px 10px;margin:0;color:var(--muted)}
-.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}figure{margin:0;border:1px solid var(--line);border-radius:6px;padding:8px;text-align:center}
-figure img{max-width:100%;height:auto;background:repeating-conic-gradient(#8884 0 25%,transparent 0 50%) 0 0/16px 16px}figure.empty{color:var(--muted);display:grid;place-items:center;min-height:80px}
+${report_page_default}
 </style>
 </head>
 <body>
@@ -29165,6 +29151,25 @@ ${tabs.map(([id, label, html]) => `<section role="tabpanel" id="panel-${id}" ari
 </html>
 `;
 }
+var encodePath = (path11) => path11.split("/").map(encodeURIComponent).join("/");
+function reportFiles(options) {
+  const files = [];
+  const imageUrls = /* @__PURE__ */ new Map();
+  options.changes.images.forEach((image) => {
+    const urls = {};
+    [
+      ["head", image.headPath, image.headByteSize],
+      ["base", image.basePath, image.baseByteSize]
+    ].forEach(([side, path11, size]) => {
+      if (!path11 || size > MAX_IMAGE_SIZE) return;
+      files.push({ path: `images/${side}/${image.file}`, content: (0, import_node_fs4.readFileSync)(path11) });
+      urls[side] = `images/${side}/${encodePath(image.file)}`;
+    });
+    imageUrls.set(image.file, urls);
+  });
+  files.push({ path: "index.html", content: renderHtml({ ...options, imageUrls }) });
+  return files;
+}
 
 // src/index.js
 var VISUAL_DIFF_MODES = /* @__PURE__ */ new Set(["summary", "branch", "none"]);
@@ -29178,7 +29183,6 @@ function runUrl() {
   const attempt = GITHUB_RUN_ATTEMPT && GITHUB_RUN_ATTEMPT !== "1" ? `/attempts/${GITHUB_RUN_ATTEMPT}` : "";
   return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}${attempt}`;
 }
-var encodePath = (path11) => path11.split("/").map(encodeURIComponent).join("/");
 async function run() {
   const token = getInput("token");
   const headPath = getInput("head-path");
@@ -29197,9 +29201,9 @@ async function run() {
   if (!VISUAL_DIFF_MODES.has(visualDiff)) throw new Error(`Invalid visual-diff "${visualDiff}"; expected one of: ${[...VISUAL_DIFF_MODES].join(", ")}.`);
   if (!Number.isFinite(maxDiffSize) || maxDiffSize < 0) throw new Error(`Invalid max-diff-size "${getInput("max-diff-size")}"; expected a byte count.`);
   const pullRequest = context2.payload.pull_request;
-  const { owner, repo } = context2.repo;
   const dir = reportDir({ pullNumber: pullRequest?.number, sha: pullRequest?.head?.sha ?? context2.sha });
   if (visualDiff === "branch" && pullRequest && context2.payload.action === "closed") {
+    const { owner, repo } = context2.repo;
     const sha = await publishToBranch({ octokit: getOctokit(token), owner, repo, branch: reportBranch, dir, files: [], message: `chore: remove file diff report for #${pullRequest.number}` });
     info(sha ? `Removed ${dir}/ from ${reportBranch}.` : `Nothing to remove for ${dir}/ on ${reportBranch}.`);
     return;
@@ -29218,23 +29222,9 @@ async function run() {
     if (visualDiff === "branch") {
       try {
         const octokit = getOctokit(token);
-        const imageUrls = /* @__PURE__ */ new Map();
-        const files = [];
-        changes.images.forEach((image) => {
-          const urls = {};
-          [
-            ["head", image.headPath, image.headByteSize],
-            ["base", image.basePath, image.baseByteSize]
-          ].forEach(([side, path11, size]) => {
-            if (!path11 || size > MAX_IMAGE_SIZE) return;
-            files.push({ path: `images/${side}/${image.file}`, content: (0, import_node_fs4.readFileSync)(path11) });
-            urls[side] = `images/${side}/${encodePath(image.file)}`;
-          });
-          imageUrls.set(image.file, urls);
-        });
+        const { owner, repo } = context2.repo;
         const where = pullRequest ? `${owner}/${repo}#${pullRequest.number}` : `${owner}/${repo}`;
-        const html = renderHtml({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, imageUrls, context: `${where} @ ${(pullRequest?.head?.sha ?? context2.sha ?? "").slice(0, 7)}` });
-        files.push({ path: "index.html", content: html });
+        const files = reportFiles({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, context: `${where} @ ${(pullRequest?.head?.sha ?? context2.sha ?? "").slice(0, 7)}` });
         await publishToBranch({ octokit, owner, repo, branch: reportBranch, dir, files, message: `chore: file diff report for ${pullRequest ? `#${pullRequest.number}` : dir}` });
         link = await reportUrl({ octokit, owner, repo, dir, pagesUrl });
         info(`Published the visual diff to ${reportBranch}/${dir}/ (${link}).`);
