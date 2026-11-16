@@ -96,12 +96,15 @@ describe("page", () => {
 	});
 
 	it("is usable on a phone and in the dark scheme", async () => {
-		const phone = await open("/base/", { width: 390, height: 844 });
-		for (const tab of ["overview", "code", "visual"]) {
-			await phone.click(`#tab-${tab}`);
-			assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${tab} scrolls sideways`);
+		// 320px is the narrowest common phone; fonts differ between machines, so don't rely on 390px fitting.
+		for (const width of [390, 320]) {
+			const phone = await open("/base/", { width, height: 844 });
+			for (const tab of ["overview", "code", "visual"]) {
+				await phone.click(`#tab-${tab}`);
+				assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${tab} scrolls sideways at ${width}px`);
+			}
+			await close(phone);
 		}
-		await close(phone);
 
 		const light = await open();
 		const dark = await open("/base/", { colorScheme: "dark" });

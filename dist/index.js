@@ -29952,6 +29952,7 @@ kbd {
 
 .segmented {
 	display: inline-flex;
+	max-inline-size: 100%;
 	padding: 2px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -30007,6 +30008,18 @@ button.ghost {
 	.segmented button,
 	button.ghost {
 		min-block-size: 36px;
+	}
+}
+
+/* Narrow screens: mode buttons keep their icons, and the label stays for screen readers and as a tooltip. */
+@media (width < 560px) {
+	.modes button span {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 }
 
@@ -30719,7 +30732,7 @@ function renderVisual({ changes, imageUrls = /* @__PURE__ */ new Map() }) {
 ${single ? `<p class="note">${status === "added" ? "New image: there's no base version to compare." : status === "removed" ? "Removed image: there's no head version to compare." : "Only one version could be included."}</p>` : ""}
 </section>`;
   }).join("");
-  const button = (attr, value, label, pressed, icon = "") => `<button type="button" data-${attr}="${value}" aria-pressed="${pressed}">${icon}<span>${label}</span></button>`;
+  const button = (attr, value, label, pressed, icon = "") => `<button type="button" data-${attr}="${value}" aria-pressed="${pressed}" title="${label}">${icon}<span>${label}</span></button>`;
   return `<div class="layout">${list}<div class="main viewer" data-mode="side" data-bg="checker" data-zoom="fit" style="--opacity:0.5;--pos:50%">
 <div class="toolbar" role="toolbar" aria-label="Compare options">
 <div class="segmented modes" role="group" aria-label="Compare mode">${button("mode", "side", "Side by side", true, ICON.side)}${button("mode", "overlay", "Overlay", false, ICON.overlay)}${button("mode", "swipe", "Swipe", false, ICON.swipe)}${button("mode", "diff", "Difference", false, ICON.diff)}</div>

@@ -379,7 +379,7 @@ ${single ? `<p class="note">${status === "added" ? "New image: there's no base v
 		})
 		.join("");
 
-	const button = (attr, value, label, pressed, icon = "") => `<button type="button" data-${attr}="${value}" aria-pressed="${pressed}">${icon}<span>${label}</span></button>`;
+	const button = (attr, value, label, pressed, icon = "") => `<button type="button" data-${attr}="${value}" aria-pressed="${pressed}" title="${label}">${icon}<span>${label}</span></button>`;
 
 	return `<div class="layout">${list}<div class="main viewer" data-mode="side" data-bg="checker" data-zoom="fit" style="--opacity:0.5;--pos:50%">
 <div class="toolbar" role="toolbar" aria-label="Compare options">

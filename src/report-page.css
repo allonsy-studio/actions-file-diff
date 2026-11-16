@@ -555,6 +555,7 @@ kbd {
 
 .segmented {
 	display: inline-flex;
+	max-inline-size: 100%;
 	padding: 2px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -610,6 +611,18 @@ button.ghost {
 	.segmented button,
 	button.ghost {
 		min-block-size: 36px;
+	}
+}
+
+/* Narrow screens: mode buttons keep their icons, and the label stays for screen readers and as a tooltip. */
+@media (width < 560px) {
+	.modes button span {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 }
 
