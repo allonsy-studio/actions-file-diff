@@ -6,10 +6,6 @@
  * of the License at <http://www.apache.org/licenses/LICENSE-2.0>
  */
 
-import { readFileSync } from "node:fs";
-
-import { MAX_IMAGE_SIZE } from "./changes.js";
-import css from "./report-page.css";
 import { isReportedFile, printChange, printPercentChange } from "./report.js";
 import { bytesToSize } from "./utilities.js";
 
@@ -25,6 +21,7 @@ const STATUS_LABEL = { added: "🆕 added", removed: "🚨 removed", modified: "
 /**
  * @typedef {object} SizeRow
  * @property {string} packageName
+ * @property {string} [packageDir] Package directory relative to the root.
  * @property {string} file Readable filename within the package.
  * @property {number|undefined} headByteSize
  * @property {number|undefined} baseByteSize
@@ -45,11 +42,11 @@ export function escapeHtml(value) {
  * @returns {SizeRow[]}
  */
 export function sizeRows(sections = []) {
-	return sections.flatMap(({ name, files }) =>
+	return sections.flatMap(({ name, packageDir, files }) =>
 		[...files.keys()]
 			.filter(isReportedFile)
 			.sort()
-			.map((file) => ({ packageName: name, file, ...files.get(file) })),
+			.map((file) => ({ packageName: name, packageDir, file, ...files.get(file) })),
 	);
 }
 
@@ -187,156 +184,4 @@ export function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY
 	}
 
 	return out.join("\n");
-}
-
-/**
- * HTML rows for one diff, with old/new line numbers.
- * @param {import("./changes.js").TextChange} change
- * @returns {string}
- */
-function renderDiffTable({ hunks }) {
-	const rows = [];
-	hunks.forEach(({ oldStart, oldLines, newStart, newLines, lines }) => {
-		rows.push(`<tr class="hunk"><td></td><td></td><td>@@ -${oldStart},${oldLines} +${newStart},${newLines} @@</td></tr>`);
-		let oldNo = oldStart;
-		let newNo = newStart;
-		lines.forEach((line) => {
-			const sign = line[0];
-			const code = escapeHtml(line.slice(1));
-			if (sign === "+") rows.push(`<tr class="add"><td></td><td>${newNo++}</td><td>+${code}</td></tr>`);
-			else if (sign === "-") rows.push(`<tr class="del"><td>${oldNo++}</td><td></td><td>-${code}</td></tr>`);
-			else if (sign === "\\") rows.push(`<tr class="meta"><td></td><td></td><td>${escapeHtml(line)}</td></tr>`);
-			else rows.push(`<tr><td>${oldNo++}</td><td>${newNo++}</td><td> ${code}</td></tr>`);
-		});
-	});
-	return `<table class="diff">${rows.join("")}</table>`;
-}
-
-/**
- * Self-contained HTML report with tabs for sizes, line diffs and, when images
- * changed, visual diffs. Works without JavaScript (all panels show).
- * @param {object} options
- * @param {string} options.title
- * @param {SizeRow[]} options.rows
- * @param {boolean} options.hasBase
- * @param {ReturnType<import("./changes.js").collectChanges>} options.changes
- * @param {{ headTotal: number, baseTotal: number }} options.totals
- * @param {Map<string, { head?: string, base?: string }>} [options.imageUrls] File → relative image URLs.
- * @param {string} [options.context] Line under the title (e.g. PR and commit).
- * @returns {string}
- */
-export function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = new Map(), context = "" }) {
-	const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
-	const pct = (v) => `${(barScale(v, max) * 100).toFixed(2)}%`;
-
-	const sizeRowsHtml = rows
-		.map(({ packageName, file, headByteSize, baseByteSize }) => {
-			const delta = hasBase ? printChange(headByteSize, baseByteSize) : "";
-			const percent = hasBase ? printPercentChange(headByteSize, baseByteSize) : "";
-			const bars = [hasBase ? `<div class="bar base" style="width:${pct(baseByteSize)}" title="base ${escapeHtml(bytesToSize(baseByteSize))}"></div>` : "", `<div class="bar head" style="width:${pct(headByteSize)}" title="head ${escapeHtml(bytesToSize(headByteSize))}"></div>`].join("");
-			return `<tr><td>${escapeHtml(packageName)}</td><td><code>${escapeHtml(file)}</code></td>${hasBase ? `<td>${escapeHtml(bytesToSize(baseByteSize))}</td>` : ""}<td>${escapeHtml(bytesToSize(headByteSize))}</td>${hasBase ? `<td>${escapeHtml(delta)}${delta !== "-" && percent ? ` (${escapeHtml(percent)})` : ""}</td>` : ""}<td class="chart">${bars}</td></tr>`;
-		})
-		.join("");
-
-	const sizesPanel = rows.length ? `<table class="sizes"><thead><tr><th>Package</th><th>File</th>${hasBase ? "<th>Base</th>" : ""}<th>Head</th>${hasBase ? "<th>Δ</th>" : ""}<th>Chart <small title="Log scale, so small files stay visible">(log)</small>${hasBase ? ' <span class="key base">base</span> <span class="key head">head</span>' : ""}</th></tr></thead><tbody>${sizeRowsHtml}</tbody></table>` : "<p>No size changes.</p>";
-
-	const diffsPanel = changes.text.length
-		? changes.text
-				.map((change) => {
-					const body = change.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(change.skipped)}.</p>` : renderDiffTable(change);
-					return `<details open class="file"><summary><code>${escapeHtml(change.file)}</code> <span class="status ${change.status}">${change.status}</span>${change.skipped ? "" : ` <span class="add">+${change.additions}</span> <span class="del">−${change.deletions}</span>`}</summary>${body}</details>`;
-				})
-				.join("")
-		: "<p>No text changes.</p>";
-
-	const image = (url, label) => (url ? `<figure><img src="${escapeHtml(url)}" alt="${label}" loading="lazy"><figcaption>${label}</figcaption></figure>` : `<figure class="empty"><figcaption>${label}: not available</figcaption></figure>`);
-	const visualPanel = changes.images
-		.map(({ file, status, headByteSize, baseByteSize }) => {
-			const urls = imageUrls.get(file) ?? {};
-			return `<section class="image"><h3><code>${escapeHtml(file)}</code> <span class="status ${status}">${status}</span> <small>${escapeHtml(bytesToSize(baseByteSize))} → ${escapeHtml(bytesToSize(headByteSize))}</small></h3><div class="pair">${image(urls.base, "Base")}${image(urls.head, "Head")}</div></section>`;
-		})
-		.join("");
-
-	const tabs = [["sizes", `Sizes (${rows.length})`, sizesPanel], ["diffs", `Line diffs (${changes.text.length})`, diffsPanel], ...(changes.images.length ? [["visual", `Visual diffs (${changes.images.length})`, visualPanel]] : [])];
-
-	const { stats } = changes;
-	const totalLine = hasBase ? `${escapeHtml(bytesToSize(totals.baseTotal))} → ${escapeHtml(bytesToSize(totals.headTotal))} (${escapeHtml(printChange(totals.headTotal, totals.baseTotal))})` : escapeHtml(bytesToSize(totals.headTotal));
-
-	return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${escapeHtml(title)}</title>
-<style>
-${css}
-</style>
-</head>
-<body>
-<main>
-<h1>${escapeHtml(title)}</h1>
-${context ? `<p class="meta-line">${escapeHtml(context)}</p>` : ""}
-<ul class="stats"><li><b>Total</b>: ${totalLine}</li><li><b>Files</b>: ${stats.added} added, ${stats.removed} removed, ${stats.modified} modified</li><li><b>Lines</b>: <span class="add">+${stats.additions}</span> / <span class="del">−${stats.deletions}</span></li></ul>
-<div role="tablist" aria-label="Report sections" hidden>${tabs.map(([id, label], i) => `<button role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(label)}</button>`).join("")}</div>
-${tabs.map(([id, label, html]) => `<section role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}"><h2 class="panel-title">${escapeHtml(label)}</h2>${html}</section>`).join("\n")}
-</main>
-<script>
-(() => {
-	const list = document.querySelector('[role=tablist]');
-	const tabs = [...list.querySelectorAll('[role=tab]')];
-	const select = (tab) => tabs.forEach((t) => {
-		const on = t === tab;
-		t.setAttribute('aria-selected', on);
-		t.tabIndex = on ? 0 : -1;
-		document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
-	});
-	list.hidden = false;
-	document.querySelectorAll('.panel-title').forEach((h) => (h.hidden = true));
-	list.addEventListener('click', (e) => { const t = e.target.closest('[role=tab]'); if (t) select(t); });
-	list.addEventListener('keydown', (e) => {
-		const i = tabs.indexOf(document.activeElement);
-		const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
-		if (next === undefined || i < 0) return;
-		e.preventDefault();
-		const t = tabs[(next + tabs.length) % tabs.length];
-		t.focus();
-		select(t);
-	});
-	select(tabs.find((t) => location.hash === '#' + t.id.slice(4)) ?? tabs[0]);
-})();
-</script>
-</body>
-</html>
-`;
-}
-
-/** Encodes each path segment for use in a relative URL. */
-const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
-
-/**
- * Files for a published report: `index.html` plus changed images (up to
- * MAX_IMAGE_SIZE each) under `images/head/` and `images/base/`.
- * @param {Omit<Parameters<typeof renderHtml>[0], "imageUrls">} options
- * @returns {import("./publish.js").ReportFile[]}
- */
-export function reportFiles(options) {
-	const files = [];
-	const imageUrls = new Map();
-
-	options.changes.images.forEach((image) => {
-		const urls = {};
-		[
-			["head", image.headPath, image.headByteSize],
-			["base", image.basePath, image.baseByteSize],
-		].forEach(([side, path, size]) => {
-			if (!path || size > MAX_IMAGE_SIZE) return;
-			files.push({ path: `images/${side}/${image.file}`, content: readFileSync(path) });
-			urls[side] = `images/${side}/${encodePath(image.file)}`;
-		});
-		imageUrls.set(image.file, urls);
-	});
-
-	files.push({ path: "index.html", content: renderHtml({ ...options, imageUrls }) });
-	return files;
 }

@@ -23,14 +23,17 @@
 		"dist/index.cjs",
 		"src/changes.js",
 		"src/index.js",
+		"src/page.js",
 		"src/publish.js",
 		"src/render.js",
+		"src/report-page.client.js",
+		"src/report-page.css",
 		"src/report.js",
 		"src/utilities.js",
 		"action.yml"
 	],
 	"scripts": {
-		"build": "esbuild src/index.js --bundle --platform=node --target=node24 --format=cjs --outfile=dist/index.cjs --legal-comments=none --log-level=warning --loader:.css=text",
+		"build": "node scripts/build.js",
 		"changeset": "opx release add",
 		"ci": "yarn lint && yarn build && yarn test",
 		"coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",

@@ -25875,6 +25875,271 @@ var Diff = class {
   }
 };
 
+// node_modules/diff/libesm/util/string.js
+function longestCommonPrefix(str1, str2) {
+  let i;
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[i] != str2[i]) {
+      return str1.slice(0, i);
+    }
+  }
+  return str1.slice(0, i);
+}
+function longestCommonSuffix(str1, str2) {
+  let i;
+  if (!str1 || !str2 || str1[str1.length - 1] != str2[str2.length - 1]) {
+    return "";
+  }
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[str1.length - (i + 1)] != str2[str2.length - (i + 1)]) {
+      return str1.slice(-i);
+    }
+  }
+  return str1.slice(-i);
+}
+function replacePrefix(string, oldPrefix, newPrefix) {
+  if (string.slice(0, oldPrefix.length) != oldPrefix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't start with prefix ${JSON.stringify(oldPrefix)}; this is a bug`);
+  }
+  return newPrefix + string.slice(oldPrefix.length);
+}
+function replaceSuffix(string, oldSuffix, newSuffix) {
+  if (!oldSuffix) {
+    return string + newSuffix;
+  }
+  if (string.slice(-oldSuffix.length) != oldSuffix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't end with suffix ${JSON.stringify(oldSuffix)}; this is a bug`);
+  }
+  return string.slice(0, -oldSuffix.length) + newSuffix;
+}
+function removePrefix(string, oldPrefix) {
+  return replacePrefix(string, oldPrefix, "");
+}
+function removeSuffix(string, oldSuffix) {
+  return replaceSuffix(string, oldSuffix, "");
+}
+function maximumOverlap(string1, string2) {
+  return string2.slice(0, overlapCount(string1, string2));
+}
+function overlapCount(a, b) {
+  let startA = 0;
+  if (a.length > b.length) {
+    startA = a.length - b.length;
+  }
+  let endB = b.length;
+  if (a.length < b.length) {
+    endB = a.length;
+  }
+  const map = Array(endB);
+  let k = 0;
+  map[0] = 0;
+  for (let j = 1; j < endB; j++) {
+    if (b[j] == b[k]) {
+      map[j] = map[k];
+    } else {
+      map[j] = k;
+    }
+    while (k > 0 && b[j] != b[k]) {
+      k = map[k];
+    }
+    if (b[j] == b[k]) {
+      k++;
+    }
+  }
+  k = 0;
+  for (let i = startA; i < a.length; i++) {
+    while (k > 0 && a[i] != b[k]) {
+      k = map[k];
+    }
+    if (a[i] == b[k]) {
+      k++;
+    }
+  }
+  return k;
+}
+function segment(string, segmenter) {
+  const parts = [];
+  for (const segmentObj of Array.from(segmenter.segment(string))) {
+    const segment2 = segmentObj.segment;
+    if (parts.length && /\s/.test(parts[parts.length - 1]) && /\s/.test(segment2)) {
+      parts[parts.length - 1] += segment2;
+    } else {
+      parts.push(segment2);
+    }
+  }
+  return parts;
+}
+function trailingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[1];
+  }
+  let i;
+  for (i = string.length - 1; i >= 0; i--) {
+    if (!string[i].match(/\s/)) {
+      break;
+    }
+  }
+  return string.substring(i + 1);
+}
+function leadingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[0];
+  }
+  const match3 = string.match(/^\s*/);
+  return match3 ? match3[0] : "";
+}
+function leadingAndTrailingWs(string, segmenter) {
+  if (!segmenter) {
+    return [leadingWs(string), trailingWs(string)];
+  }
+  if (segmenter.resolvedOptions().granularity != "word") {
+    throw new Error('The segmenter passed must have a granularity of "word"');
+  }
+  const segments2 = segment(string, segmenter);
+  const firstSeg = segments2[0];
+  const lastSeg = segments2[segments2.length - 1];
+  const head = /\s/.test(firstSeg) ? firstSeg : "";
+  const tail = /\s/.test(lastSeg) ? lastSeg : "";
+  return [head, tail];
+}
+
+// node_modules/diff/libesm/diff/word.js
+var extendedWordChars = "a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
+var tokenizeIncludingWhitespace = new RegExp(`[${extendedWordChars}]+|\\s+|[^${extendedWordChars}]`, "ug");
+var WordDiff = class extends Diff {
+  equals(left, right, options) {
+    if (options.ignoreCase) {
+      left = left.toLowerCase();
+      right = right.toLowerCase();
+    }
+    return left.trim() === right.trim();
+  }
+  tokenize(value, options = {}) {
+    let parts;
+    if (options.intlSegmenter) {
+      const segmenter = options.intlSegmenter;
+      if (segmenter.resolvedOptions().granularity != "word") {
+        throw new Error('The segmenter passed must have a granularity of "word"');
+      }
+      parts = segment(value, segmenter);
+    } else {
+      parts = value.match(tokenizeIncludingWhitespace) || [];
+    }
+    const tokens = [];
+    let prevPart = null;
+    parts.forEach((part) => {
+      if (/\s/.test(part)) {
+        if (prevPart == null) {
+          tokens.push(part);
+        } else {
+          tokens.push(tokens.pop() + part);
+        }
+      } else if (prevPart != null && /\s/.test(prevPart)) {
+        if (tokens[tokens.length - 1] == prevPart) {
+          tokens.push(tokens.pop() + part);
+        } else {
+          tokens.push(prevPart + part);
+        }
+      } else {
+        tokens.push(part);
+      }
+      prevPart = part;
+    });
+    return tokens;
+  }
+  join(tokens) {
+    return tokens.map((token, i) => {
+      if (i == 0) {
+        return token;
+      } else {
+        return token.replace(/^\s+/, "");
+      }
+    }).join("");
+  }
+  postProcess(changes, options) {
+    if (!changes || options.oneChangePerToken) {
+      return changes;
+    }
+    let lastKeep = null;
+    let insertion = null;
+    let deletion = null;
+    changes.forEach((change) => {
+      if (change.added) {
+        insertion = change;
+      } else if (change.removed) {
+        deletion = change;
+      } else {
+        if (insertion || deletion) {
+          dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change, options.intlSegmenter);
+        }
+        lastKeep = change;
+        insertion = null;
+        deletion = null;
+      }
+    });
+    if (insertion || deletion) {
+      dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null, options.intlSegmenter);
+    }
+    return changes;
+  }
+};
+var wordDiff = new WordDiff();
+function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep, segmenter) {
+  if (deletion && insertion) {
+    const [oldWsPrefix, oldWsSuffix] = leadingAndTrailingWs(deletion.value, segmenter);
+    const [newWsPrefix, newWsSuffix] = leadingAndTrailingWs(insertion.value, segmenter);
+    if (startKeep) {
+      const commonWsPrefix = longestCommonPrefix(oldWsPrefix, newWsPrefix);
+      startKeep.value = replaceSuffix(startKeep.value, newWsPrefix, commonWsPrefix);
+      deletion.value = removePrefix(deletion.value, commonWsPrefix);
+      insertion.value = removePrefix(insertion.value, commonWsPrefix);
+    }
+    if (endKeep) {
+      const commonWsSuffix = longestCommonSuffix(oldWsSuffix, newWsSuffix);
+      endKeep.value = replacePrefix(endKeep.value, newWsSuffix, commonWsSuffix);
+      deletion.value = removeSuffix(deletion.value, commonWsSuffix);
+      insertion.value = removeSuffix(insertion.value, commonWsSuffix);
+    }
+  } else if (insertion) {
+    if (startKeep) {
+      const ws = leadingWs(insertion.value, segmenter);
+      insertion.value = insertion.value.substring(ws.length);
+    }
+    if (endKeep) {
+      const ws = leadingWs(endKeep.value, segmenter);
+      endKeep.value = endKeep.value.substring(ws.length);
+    }
+  } else if (startKeep && endKeep) {
+    const newWsFull = leadingWs(endKeep.value, segmenter), [delWsStart, delWsEnd] = leadingAndTrailingWs(deletion.value, segmenter);
+    const newWsStart = longestCommonPrefix(newWsFull, delWsStart);
+    deletion.value = removePrefix(deletion.value, newWsStart);
+    const newWsEnd = longestCommonSuffix(removePrefix(newWsFull, newWsStart), delWsEnd);
+    deletion.value = removeSuffix(deletion.value, newWsEnd);
+    endKeep.value = replacePrefix(endKeep.value, newWsFull, newWsEnd);
+    startKeep.value = replaceSuffix(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
+  } else if (endKeep) {
+    const endKeepWsPrefix = leadingWs(endKeep.value, segmenter);
+    const deletionWsSuffix = trailingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(deletionWsSuffix, endKeepWsPrefix);
+    deletion.value = removeSuffix(deletion.value, overlap);
+  } else if (startKeep) {
+    const startKeepWsSuffix = trailingWs(startKeep.value, segmenter);
+    const deletionWsPrefix = leadingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(startKeepWsSuffix, deletionWsPrefix);
+    deletion.value = removePrefix(deletion.value, overlap);
+  }
+}
+var WordsWithSpaceDiff = class extends Diff {
+  tokenize(value) {
+    const regex = new RegExp(`(\\r?\\n)|[${extendedWordChars}]+|[^\\S\\n\\r]+|[^${extendedWordChars}]`, "ug");
+    return value.match(regex) || [];
+  }
+};
+var wordsWithSpaceDiff = new WordsWithSpaceDiff();
+function diffWordsWithSpace(oldStr, newStr, options) {
+  return wordsWithSpaceDiff.diff(oldStr, newStr, options);
+}
+
 // node_modules/diff/libesm/diff/line.js
 var LineDiff = class extends Diff {
   constructor() {
@@ -28075,16 +28340,16 @@ var Path = class {
     } else {
       (0, import_assert2.default)(itemPath.length > 0, `Parameter 'itemPath' must not be an empty array`);
       for (let i = 0; i < itemPath.length; i++) {
-        let segment = itemPath[i];
-        (0, import_assert2.default)(segment, `Parameter 'itemPath' must not contain any empty segments`);
-        segment = normalizeSeparators2(itemPath[i]);
-        if (i === 0 && hasRoot(segment)) {
-          segment = safeTrimTrailingSeparator(segment);
-          (0, import_assert2.default)(segment === dirname4(segment), `Parameter 'itemPath' root segment contains information for multiple segments`);
-          this.segments.push(segment);
+        let segment2 = itemPath[i];
+        (0, import_assert2.default)(segment2, `Parameter 'itemPath' must not contain any empty segments`);
+        segment2 = normalizeSeparators2(itemPath[i]);
+        if (i === 0 && hasRoot(segment2)) {
+          segment2 = safeTrimTrailingSeparator(segment2);
+          (0, import_assert2.default)(segment2 === dirname4(segment2), `Parameter 'itemPath' root segment contains information for multiple segments`);
+          this.segments.push(segment2);
         } else {
-          (0, import_assert2.default)(!segment.includes(path8.sep), `Parameter 'itemPath' contains unexpected path separators`);
-          this.segments.push(segment);
+          (0, import_assert2.default)(!segment2.includes(path8.sep), `Parameter 'itemPath' contains unexpected path separators`);
+          this.segments.push(segment2);
         }
       }
     }
@@ -28219,22 +28484,22 @@ var Pattern = class _Pattern {
    * Attempts to unescape a pattern segment to create a literal path segment.
    * Otherwise returns empty string.
    */
-  static getLiteral(segment) {
+  static getLiteral(segment2) {
     let literal = "";
-    for (let i = 0; i < segment.length; i++) {
-      const c = segment[i];
-      if (c === "\\" && !IS_WINDOWS6 && i + 1 < segment.length) {
-        literal += segment[++i];
+    for (let i = 0; i < segment2.length; i++) {
+      const c = segment2[i];
+      if (c === "\\" && !IS_WINDOWS6 && i + 1 < segment2.length) {
+        literal += segment2[++i];
         continue;
       } else if (c === "*" || c === "?") {
         return "";
-      } else if (c === "[" && i + 1 < segment.length) {
+      } else if (c === "[" && i + 1 < segment2.length) {
         let set = "";
         let closed = -1;
-        for (let i2 = i + 1; i2 < segment.length; i2++) {
-          const c2 = segment[i2];
-          if (c2 === "\\" && !IS_WINDOWS6 && i2 + 1 < segment.length) {
-            set += segment[++i2];
+        for (let i2 = i + 1; i2 < segment2.length; i2++) {
+          const c2 = segment2[i2];
+          if (c2 === "\\" && !IS_WINDOWS6 && i2 + 1 < segment2.length) {
+            set += segment2[++i2];
             continue;
           } else if (c2 === "]") {
             closed = i2;
@@ -28974,11 +29239,8 @@ async function publishToBranch({ octokit, owner, repo, branch, dir, files, messa
   }
 }
 
-// src/render.js
+// src/page.js
 var import_node_fs4 = require("node:fs");
-
-// src/report-page.css
-var report_page_default = '/* Styles for the published visual diff page (render.js \u2192 renderHtml). Bundled as text. */\n\n/* ---- Tokens ------------------------------------------------------------ */\n:root {\n	color-scheme: light dark;\n	--bg: #fff;\n	--fg: #1f2328;\n	--muted: #59636e;\n	--line: #d1d9e0;\n	--surface: color-mix(in srgb, var(--line) 25%, transparent);\n	--add-bg: #dafbe1;\n	--add-fg: #1a7f37;\n	--del-bg: #ffebe9;\n	--del-fg: #d1242f;\n	--hunk-bg: #ddf4ff;\n	--base: #8c959f;\n	--head: #0969da;\n	--radius: 6px;\n	--font: 14px/1.5 system-ui, sans-serif;\n	--mono: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;\n}\n\n@media (prefers-color-scheme: dark) {\n	:root {\n		--bg: #0d1117;\n		--fg: #e6edf3;\n		--muted: #9198a1;\n		--line: #3d444d;\n		--add-bg: #12261e;\n		--add-fg: #3fb950;\n		--del-bg: #25171c;\n		--del-fg: #f85149;\n		--hunk-bg: #121d2f;\n		--base: #656c76;\n		--head: #4493f8;\n	}\n}\n\n/* ---- Page -------------------------------------------------------------- */\n* {\n	box-sizing: border-box;\n}\n\nbody {\n	margin: 0;\n	padding: 16px;\n	background: var(--bg);\n	color: var(--fg);\n	font: var(--font);\n}\n\nmain {\n	max-width: 1200px;\n	margin: 0 auto;\n}\n\nh1 {\n	font-size: 1.4rem;\n	margin: 0 0 4px;\n}\n\n.meta-line {\n	color: var(--muted);\n	margin: 0 0 12px;\n}\n\n.stats {\n	display: flex;\n	flex-wrap: wrap;\n	gap: 8px 20px;\n	margin: 0 0 16px;\n	padding: 0;\n	list-style: none;\n}\n\n/* ---- Tabs -------------------------------------------------------------- */\n[role="tablist"] {\n	display: flex;\n	gap: 4px;\n	border-bottom: 1px solid var(--line);\n	overflow-x: auto;\n}\n\n[role="tab"] {\n	font: inherit;\n	color: inherit;\n	background: none;\n	border: 1px solid transparent;\n	border-bottom: none;\n	border-radius: var(--radius) var(--radius) 0 0;\n	padding: 6px 12px;\n	cursor: pointer;\n	white-space: nowrap;\n}\n\n[role="tab"][aria-selected="true"] {\n	border-color: var(--line);\n	background: var(--bg);\n	margin-bottom: -1px;\n	font-weight: 600;\n}\n\n[role="tabpanel"] {\n	padding: 16px 0;\n	overflow-x: auto;\n}\n\n/* ---- Sizes tab --------------------------------------------------------- */\ntable {\n	border-collapse: collapse;\n	width: 100%;\n}\n\nth,\ntd {\n	text-align: left;\n	padding: 4px 8px;\n	border-bottom: 1px solid var(--line);\n	vertical-align: top;\n}\n\n.chart {\n	min-width: 160px;\n}\n\n.bar {\n	height: 8px;\n	border-radius: 4px;\n	margin: 2px 0;\n}\n\n.bar.base,\n.key.base {\n	background: var(--base);\n}\n\n.bar.head,\n.key.head {\n	background: var(--head);\n}\n\n.key {\n	display: inline-block;\n	padding: 0 6px;\n	border-radius: 4px;\n	color: #fff;\n	font-weight: 400;\n	font-size: 0.8em;\n}\n\n/* ---- Line diffs tab ---------------------------------------------------- */\ndetails.file {\n	border: 1px solid var(--line);\n	border-radius: var(--radius);\n	margin: 0 0 12px;\n	overflow: hidden;\n}\n\ndetails.file > summary {\n	padding: 6px 10px;\n	cursor: pointer;\n	background: var(--surface);\n}\n\n.diff {\n	font: var(--mono);\n	tab-size: 4;\n}\n\n.diff td {\n	border: 0;\n	padding: 0 8px;\n	white-space: pre;\n}\n\n/* Line-number gutters. */\n.diff td:nth-child(-n + 2) {\n	color: var(--muted);\n	text-align: right;\n	user-select: none;\n	width: 1%;\n}\n\n.diff tr.add {\n	background: var(--add-bg);\n}\n\n.diff tr.del {\n	background: var(--del-bg);\n}\n\n.diff tr.hunk,\n.diff tr.meta {\n	background: var(--hunk-bg);\n	color: var(--muted);\n}\n\nspan.add {\n	color: var(--add-fg);\n}\n\nspan.del {\n	color: var(--del-fg);\n}\n\n.status {\n	font-size: 0.8em;\n	padding: 0 6px;\n	border: 1px solid var(--line);\n	border-radius: 10px;\n}\n\n.status.added {\n	border-color: var(--add-fg);\n	color: var(--add-fg);\n}\n\n.status.removed {\n	border-color: var(--del-fg);\n	color: var(--del-fg);\n}\n\n.note {\n	padding: 8px 10px;\n	margin: 0;\n	color: var(--muted);\n}\n\n/* ---- Visual diffs tab -------------------------------------------------- */\n.pair {\n	display: grid;\n	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));\n	gap: 12px;\n}\n\nfigure {\n	margin: 0;\n	border: 1px solid var(--line);\n	border-radius: var(--radius);\n	padding: 8px;\n	text-align: center;\n}\n\n/* Checkerboard behind images so transparency is visible. */\nfigure img {\n	max-width: 100%;\n	height: auto;\n	background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 16px 16px;\n}\n\nfigure.empty {\n	color: var(--muted);\n	display: grid;\n	place-items: center;\n	min-height: 80px;\n}\n';
 
 // src/render.js
 var SUMMARY_BUDGET = 900 * 1024;
@@ -28989,7 +29251,7 @@ function escapeHtml(value) {
 }
 function sizeRows(sections = []) {
   return sections.flatMap(
-    ({ name, files }) => [...files.keys()].filter(isReportedFile).sort().map((file) => ({ packageName: name, file, ...files.get(file) }))
+    ({ name, packageDir, files }) => [...files.keys()].filter(isReportedFile).sort().map((file) => ({ packageName: name, packageDir, file, ...files.get(file) }))
   );
 }
 function barScale(value, max) {
@@ -29069,50 +29331,1333 @@ function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY_BUDGET
   }
   return out.join("\n");
 }
-function renderDiffTable({ hunks }) {
-  const rows = [];
-  hunks.forEach(({ oldStart, oldLines, newStart, newLines, lines }) => {
-    rows.push(`<tr class="hunk"><td></td><td></td><td>@@ -${oldStart},${oldLines} +${newStart},${newLines} @@</td></tr>`);
-    let oldNo = oldStart;
-    let newNo = newStart;
+
+// src/report-page.css
+var report_page_default = `/* Styles for the published visual diff page (page.js \u2192 renderHtml). Bundled as text. */
+
+/* ---- Tokens ------------------------------------------------------------ */
+:root {
+	color-scheme: light dark;
+
+	--bg: light-dark(#f5f6f8, #0b0d12);
+	--surface: light-dark(#fff, #12151c);
+	--surface-2: light-dark(#f1f3f6, #181c25);
+	--line: light-dark(#e2e5ea, #252a35);
+	--line-strong: light-dark(#cdd2da, #353b48);
+	--fg: light-dark(#151821, #e6e9ef);
+	--muted: light-dark(#5b6372, #98a1b0);
+	--accent: light-dark(#4f46e5, #8f8aff);
+	--accent-soft: light-dark(#eef0ff, #1d1f3a);
+
+	--add: light-dark(#1a7f37, #3fb950);
+	--add-bg: light-dark(#e9f8ee, #10241a);
+	--add-mark: light-dark(#b7ebc6, #1f5130);
+	--del: light-dark(#cf222e, #f85149);
+	--del-bg: light-dark(#fdeeee, #2a1517);
+	--del-mark: light-dark(#f8c4c4, #6b2328);
+	--mod: light-dark(#9a6700, #d29922);
+	--mod-bg: light-dark(#fff6dd, #2a2110);
+	--hunk-bg: light-dark(#f0f4ff, #141b2c);
+
+	--base: light-dark(#9aa3b2, #5d6676);
+	--head: var(--accent);
+	--checker-a: light-dark(#e6e8ec, #2a2f3a);
+	--checker-b: light-dark(#fff, #1b1f28);
+
+	--radius: 10px;
+	--radius-sm: 6px;
+	--shadow: 0 1px 2px light-dark(rgb(16 24 40 / 6%), rgb(0 0 0 / 40%));
+	--topbar: 52px;
+	--font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+	--mono: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---- Base -------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font: var(--font);
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+svg {
+	inline-size: 16px;
+	block-size: 16px;
+	flex: none;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+kbd {
+	padding: 2px 5px;
+	border: 1px solid var(--line-strong);
+	border-block-end-width: 2px;
+	border-radius: 4px;
+	background: var(--surface);
+	font:
+		11px/1 ui-monospace,
+		monospace;
+}
+
+.sr-only {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.muted {
+	color: var(--muted);
+	font-weight: 400;
+}
+
+.wrap {
+	max-inline-size: 1280px;
+	margin-inline: auto;
+	padding-inline: 16px;
+}
+
+/* ---- Top bar ----------------------------------------------------------- */
+.topbar {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: 10;
+	background: color-mix(in srgb, var(--surface) 88%, transparent);
+	backdrop-filter: blur(8px);
+	border-block-end: 1px solid var(--line);
+}
+
+.topbar-inner {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-block-size: var(--topbar);
+}
+
+.brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.brand svg {
+	inline-size: 20px;
+	block-size: 20px;
+	color: var(--accent);
+	stroke: none;
+}
+
+.context {
+	overflow: hidden;
+	color: var(--muted);
+	font: var(--mono);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---- Summary cards ----------------------------------------------------- */
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 12px;
+	margin-block: 20px 16px;
+}
+
+.card {
+	padding: 14px 16px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+}
+
+.card h2 {
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.metric {
+	margin: 4px 0 2px;
+	font-size: 24px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+}
+
+.sub {
+	margin: 0;
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.chip,
+.pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 8px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 20px;
+	white-space: nowrap;
+}
+
+.chip.added,
+.pill.added {
+	background: var(--add-bg);
+	color: var(--add);
+}
+
+.chip.removed,
+.pill.removed {
+	background: var(--del-bg);
+	color: var(--del);
+}
+
+.chip.modified,
+.pill.modified {
+	background: var(--mod-bg);
+	color: var(--mod);
+}
+
+.ratio {
+	display: block;
+	block-size: 6px;
+	margin-block-start: 8px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: var(--del);
+}
+
+.ratio > span {
+	display: block;
+	block-size: 100%;
+	background: var(--add);
+}
+
+.add {
+	color: var(--add);
+}
+
+.del {
+	color: var(--del);
+}
+
+.delta {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.delta small {
+	opacity: 0.75;
+}
+
+.delta.up {
+	color: var(--del);
+}
+
+.delta.down {
+	color: var(--add);
+}
+
+.delta.same {
+	color: var(--muted);
+}
+
+/* ---- Tabs -------------------------------------------------------------- */
+.tablist {
+	display: flex;
+	gap: 4px;
+	overflow-x: auto;
+	border-block-end: 1px solid var(--line);
+	scrollbar-width: none;
+}
+
+[role="tab"] {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border: 0;
+	background: none;
+	color: var(--muted);
+	font: inherit;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+[role="tab"]:hover,
+[role="tab"][aria-selected="true"] {
+	color: var(--fg);
+}
+
+/* Underline drawn with a border so it survives forced colors. */
+[role="tab"][aria-selected="true"]::after {
+	content: "";
+	position: absolute;
+	inset: auto 8px -1px;
+	border-block-end: 2px solid var(--accent);
+}
+
+.count {
+	min-inline-size: 20px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--surface-2);
+	color: var(--muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	line-height: 20px;
+	text-align: center;
+}
+
+[role="tab"][aria-selected="true"] .count {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+
+/* Spacing lives on the inner wrapper: hidden="until-found" panels still render their own box. */
+.panel {
+	padding-block: 16px 32px;
+}
+
+.empty-state {
+	padding: 48px 16px;
+	border: 1px dashed var(--line-strong);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--muted);
+	text-align: center;
+}
+
+/* ---- Overview table ---------------------------------------------------- */
+.table-card {
+	overflow-x: auto;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.sizes {
+	inline-size: 100%;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+
+.sizes th,
+.sizes td {
+	padding: 8px 12px;
+	border-block-end: 1px solid var(--line);
+	text-align: start;
+	white-space: nowrap;
+}
+
+.sizes thead th {
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.sizes tbody:last-child tr:last-child > * {
+	border-block-end: 0;
+}
+
+.sizes tr.pkg > * {
+	background: var(--surface-2);
+	font-weight: 600;
+}
+
+.sizes .num {
+	text-align: end;
+}
+
+.sizes .file-cell {
+	inline-size: 100%;
+	font: var(--mono);
+}
+
+.sizes td:first-child {
+	inline-size: 1%;
+	padding-inline-end: 0;
+}
+
+.sizes .chart {
+	min-inline-size: 180px;
+}
+
+.bar {
+	display: block;
+	block-size: 6px;
+	margin-block: 3px;
+	border-radius: 999px;
+}
+
+.bar.base,
+.key.base {
+	background: var(--base);
+}
+
+.bar.head,
+.key.head {
+	background: var(--head);
+}
+
+.key {
+	display: inline-block;
+	margin-inline-start: 6px;
+	padding: 0 6px;
+	border-radius: 4px;
+	color: light-dark(#fff, #0b0d12);
+	font-size: 11px;
+	line-height: 18px;
+}
+
+.dot {
+	display: inline-block;
+	flex: none;
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	background: var(--muted);
+}
+
+.dot.added {
+	background: var(--add);
+}
+
+.dot.removed {
+	background: var(--del);
+}
+
+.dot.modified {
+	background: var(--mod);
+}
+
+.dot.unchanged {
+	background: transparent;
+	box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+
+/* ---- Two-column layout (code + visual) --------------------------------- */
+.layout {
+	display: grid;
+	grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+	gap: 16px;
+	align-items: start;
+}
+
+.filelist {
+	position: sticky;
+	inset-block-start: calc(var(--topbar) + 12px);
+	max-block-size: calc(100dvh - var(--topbar) - 24px);
+	overflow-y: auto;
+	padding: 6px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+@media (width < 860px) {
+	.layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.filelist {
+		position: static;
+		max-block-size: 220px;
+	}
+}
+
+.filelist ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.filelist a,
+.filelist button {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	inline-size: 100%;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--fg);
+	font: inherit;
+	font-size: 13px;
+	text-align: start;
+	cursor: pointer;
+}
+
+.filelist a:hover,
+.filelist button:hover {
+	background: var(--surface-2);
+	text-decoration: none;
+}
+
+.filelist button[aria-current="true"] {
+	background: var(--accent-soft);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Long paths truncate from the left so the file name stays visible. */
+.path {
+	min-inline-size: 0;
+	overflow: hidden;
+	direction: rtl;
+	font: var(--mono);
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.path > bdi {
+	direction: ltr;
+}
+
+.dir {
+	color: var(--muted);
+}
+
+.name {
+	font-weight: 600;
+}
+
+.meta {
+	color: var(--muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* ---- Toolbar + segmented controls -------------------------------------- */
+.toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-block-end: 12px;
+}
+
+.spacer {
+	flex: 1;
+}
+
+.segmented {
+	display: inline-flex;
+	padding: 2px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface-2);
+}
+
+.segmented button,
+button.ghost {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-block-size: 28px;
+	padding: 0 10px;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: none;
+	color: var(--muted);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+	border-color: var(--line-strong);
+	background: var(--surface);
+	color: var(--fg);
+	box-shadow: var(--shadow);
+}
+
+.segmented button[aria-disabled="true"] {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+button.ghost {
+	border-color: var(--line);
+	background: var(--surface);
+	color: var(--fg);
+}
+
+@media (hover: hover) {
+	.segmented button:not([aria-pressed="true"], [aria-disabled="true"]):hover {
+		color: var(--fg);
+	}
+
+	button.ghost:hover {
+		border-color: var(--line-strong);
+	}
+}
+
+@media (pointer: coarse) {
+	.segmented button,
+	button.ghost {
+		min-block-size: 36px;
+	}
+}
+
+/* ---- Code diffs -------------------------------------------------------- */
+.file {
+	margin-block-end: 12px;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+	scroll-margin-block-start: calc(var(--topbar) + 12px);
+}
+
+.file summary {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	background: var(--surface-2);
+	cursor: pointer;
+	list-style: none;
+}
+
+.file summary::-webkit-details-marker {
+	display: none;
+}
+
+.file details[open] > summary {
+	border-block-end: 1px solid var(--line);
+}
+
+.file summary .path {
+	flex: 1;
+}
+
+.chev svg {
+	display: block;
+	color: var(--muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.chev svg {
+		transition: rotate 0.15s;
+	}
+}
+
+.file details[open] .chev svg {
+	rotate: 90deg;
+}
+
+.note {
+	margin: 0;
+	padding: 12px;
+	color: var(--muted);
+}
+
+.diff-scroll {
+	overflow-x: auto;
+}
+
+.diff {
+	inline-size: 100%;
+	border-collapse: collapse;
+	font: var(--mono);
+	tab-size: 4;
+}
+
+.diff td {
+	padding: 0 10px;
+	vertical-align: top;
+}
+
+.diff .code {
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+
+.diff .ln {
+	inline-size: 1%;
+	color: var(--muted);
+	text-align: end;
+	white-space: nowrap;
+	opacity: 0.8;
+	user-select: none;
+}
+
+.diff .sign {
+	display: inline-block;
+	inline-size: 1.5ch;
+	color: var(--muted);
+	user-select: none;
+}
+
+.diff tr.add,
+.diff td.add {
+	background: var(--add-bg);
+}
+
+.diff tr.del,
+.diff td.del {
+	background: var(--del-bg);
+}
+
+.diff tr.add .sign {
+	color: var(--add);
+}
+
+.diff tr.del .sign {
+	color: var(--del);
+}
+
+.diff mark {
+	border-radius: 3px;
+	color: inherit;
+}
+
+.diff tr.add mark,
+.diff td.add mark {
+	background: var(--add-mark);
+}
+
+.diff tr.del mark,
+.diff td.del mark {
+	background: var(--del-mark);
+}
+
+.diff tr.hunk td,
+.diff tr.meta td {
+	padding-block: 4px;
+	background: var(--hunk-bg);
+	color: var(--muted);
+}
+
+.diff td.empty {
+	background: repeating-linear-gradient(-45deg, transparent 0 6px, var(--surface-2) 6px 12px);
+}
+
+.diff.split {
+	table-layout: fixed;
+}
+
+.diff.split .ln-col {
+	inline-size: 52px;
+}
+
+.diff.split td.code + td.ln {
+	border-inline-start: 1px solid var(--line);
+}
+
+.code-main[data-view="unified"] .diff.split,
+.code-main[data-view="split"] .diff.unified {
+	display: none;
+}
+
+/* ---- Visual viewer ----------------------------------------------------- */
+.viewer {
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.image-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	margin-block-end: 10px;
+}
+
+.image-head .path {
+	flex: 1 1 200px;
+}
+
+.dims {
+	display: inline-flex;
+	gap: 8px;
+}
+
+.dims span:empty {
+	display: none;
+}
+
+/* Always rendered so switching modes doesn't shift the image. */
+.sliders {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	min-block-size: 28px;
+	margin-block-end: 10px;
+}
+
+.slider-field,
+.sliders .hint {
+	display: none;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.viewer[data-mode="overlay"] .opacity-field,
+.viewer[data-mode="swipe"] .swipe-field,
+.viewer[data-mode="diff"] .diff-hint,
+.viewer[data-mode="side"] .side-hint {
+	display: flex;
+}
+
+.slider-field output {
+	min-inline-size: 4ch;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Native range input with custom track, fill and thumb. */
+input[type="range"] {
+	--slider-track-size: 4px;
+	--slider-thumb-size: 16px;
+	--slider-track-color: var(--line-strong);
+	--slider-fill-color: var(--accent);
+	--attr-min: 0;
+	--attr-max: 100;
+	--control-value: 50;
+	--slider-progress: calc((var(--control-value) - var(--attr-min)) / (var(--attr-max) - var(--attr-min)) * 100%);
+
+	appearance: none;
+	inline-size: min(280px, 50vw);
+	block-size: 28px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+	block-size: var(--slider-track-size);
+	border-radius: 999px;
+	background: linear-gradient(to right, var(--slider-fill-color) var(--slider-progress), var(--slider-track-color) var(--slider-progress));
+}
+
+input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	inline-size: var(--slider-thumb-size);
+	block-size: var(--slider-thumb-size);
+	margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+	border: 2px solid var(--surface);
+	border-radius: 50%;
+	background: var(--slider-fill-color);
+	box-shadow: 0 0 0 1px var(--slider-fill-color);
+}
+
+input[type="range"]::-moz-range-track {
+	block-size: var(--slider-track-size);
+	border-radius: 999px;
+	background: var(--slider-track-color);
+}
+
+input[type="range"]::-moz-range-progress {
+	block-size: var(--slider-track-size);
+	border-radius: 999px;
+	background: var(--slider-fill-color);
+}
+
+input[type="range"]::-moz-range-thumb {
+	inline-size: var(--slider-thumb-size);
+	block-size: var(--slider-thumb-size);
+	border: 2px solid var(--surface);
+	border-radius: 50%;
+	background: var(--slider-fill-color);
+}
+
+input[type="range"]:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 4px;
+}
+
+/* Stage + layers. Side by side: two cells. Other modes: one stacked cell. */
+.stage {
+	display: grid;
+	place-items: center;
+	min-block-size: 260px;
+	padding: 16px;
+	overflow: auto;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.layers {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(2, auto);
+	gap: 16px;
+	align-items: start;
+	max-inline-size: 100%;
+	touch-action: pan-y;
+}
+
+.layer {
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	min-inline-size: 0;
+	margin: 0;
+}
+
+.layer img {
+	display: block;
+	max-inline-size: 100%;
+	block-size: auto;
+	border-radius: 2px;
+}
+
+/* Script sets each image's width; zoomed images may exceed the stage and scroll. */
+.viewer:not([data-zoom="fit"]) .layer img {
+	max-inline-size: none;
+}
+
+.layer img.upscaled {
+	image-rendering: pixelated;
+}
+
+.layer figcaption {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.layer.missing {
+	place-items: center;
+	min-inline-size: 160px;
+	min-block-size: 120px;
+	border: 1px dashed var(--line-strong);
+	border-radius: var(--radius-sm);
+}
+
+/* Image backgrounds: checker shows transparency. */
+.viewer[data-bg="checker"] .layer img {
+	background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 16px 16px;
+}
+
+.viewer[data-bg="light"] :is(.layer img, .stage) {
+	background: #fff;
+}
+
+.viewer[data-bg="dark"] :is(.layer img, .stage) {
+	background: #111;
+}
+
+/* Stacked modes: base and head share one grid cell. */
+.viewer:is([data-mode="overlay"], [data-mode="swipe"], [data-mode="diff"]) .image-item:not([data-single]) {
+	.layers {
+		grid-template-columns: auto;
+		gap: 0;
+	}
+
+	.layer {
+		grid-area: 1 / 1;
+	}
+
+	.layer figcaption {
+		display: none;
+	}
+
+	/* Only the base draws a background, so it can't hide behind the head. */
+	.layer.head img {
+		background: none;
+	}
+}
+
+.viewer[data-mode="overlay"] .image-item:not([data-single]) .layer.head {
+	opacity: var(--opacity);
+}
+
+.viewer[data-mode="swipe"] .image-item:not([data-single]) {
+	.layers {
+		cursor: ew-resize;
+		touch-action: none;
+	}
+
+	.layer.head {
+		clip-path: inset(0 0 0 var(--pos));
+	}
+
+	.divider,
+	.tag {
+		display: block;
+	}
+
+	.divider {
+		inset-inline-start: var(--pos);
+	}
+}
+
+.viewer[data-mode="diff"] .image-item:not([data-single]) {
+	.stage,
+	.layer.base img {
+		background: #000;
+	}
+
+	.layer.head {
+		mix-blend-mode: difference;
+	}
+}
+
+/* Single-version images always show one cell. */
+.image-item[data-single] .layer.missing {
+	display: none;
+}
+
+.divider {
+	position: absolute;
+	inset-block: 0;
+	display: none;
+	inline-size: 2px;
+	margin-inline-start: -1px;
+	background: var(--accent);
+	box-shadow: 0 0 0 1px light-dark(rgb(255 255 255 / 70%), rgb(0 0 0 / 60%));
+	pointer-events: none;
+}
+
+.divider::after {
+	content: "";
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	inline-size: 14px;
+	block-size: 28px;
+	border: 2px solid var(--surface);
+	border-radius: 999px;
+	background: var(--accent);
+	translate: -50% -50%;
+}
+
+.tag {
+	position: absolute;
+	inset-block-start: 6px;
+	display: none;
+	padding: 0 6px;
+	border-radius: 4px;
+	background: rgb(0 0 0 / 60%);
+	color: #fff;
+	font-size: 11px;
+	line-height: 18px;
+	pointer-events: none;
+}
+
+.tag-base {
+	inset-inline-start: 6px;
+}
+
+.tag-head {
+	inset-inline-end: 6px;
+}
+
+.pager {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-block-start: 12px;
+}
+
+.pager-count,
+.pager .hint {
+	color: var(--muted);
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.pager .hint {
+	margin-inline-start: auto;
+}
+
+/* ---- Footer ------------------------------------------------------------ */
+.footer {
+	padding-block: 8px 32px;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+@media (forced-colors: active) {
+	.bar,
+	.dot,
+	.ratio > span {
+		forced-color-adjust: none;
+	}
+}
+`;
+
+// src/report-page.client.js
+var report_page_client_default = '/* Browser script for the visual diff page (inlined by page.js). */\n(() => {\n	const $ = (sel, root = document) => root.querySelector(sel);\n	const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];\n	const store = {\n		get(key) {\n			try {\n				return localStorage.getItem(`file-diff:${key}`);\n			} catch {\n				return null;\n			}\n		},\n		set(key, value) {\n			try {\n				localStorage.setItem(`file-diff:${key}`, value);\n			} catch {\n				// Storage blocked; the choice still applies to this view.\n			}\n		},\n	};\n\n	/* ---- Tabs: selection follows focus, roving tabindex ------------------ */\n	const tablist = $(\'[role="tablist"]\');\n	const tabs = $$(\'[role="tab"]\', tablist);\n	const panelFor = (tab) => document.getElementById(tab.id.replace(/^tab-/, "panel-"));\n\n	function selectTab(tab, { focus = false, push = true } = {}) {\n		tabs.forEach((t) => {\n			const on = t === tab;\n			t.setAttribute("aria-selected", String(on));\n			t.tabIndex = on ? 0 : -1;\n			const panel = panelFor(t);\n			if (on) panel.removeAttribute("hidden");\n			else panel.setAttribute("hidden", "until-found");\n		});\n		if (focus) tab.focus();\n		tab.scrollIntoView({ block: "nearest", inline: "nearest" });\n		if (push) history.replaceState(null, "", `#${tab.id.slice(4)}`);\n	}\n\n	tablist.addEventListener("click", (e) => {\n		const tab = e.target.closest(\'[role="tab"]\');\n		if (tab) selectTab(tab);\n	});\n	tablist.addEventListener("keydown", (e) => {\n		const i = tabs.indexOf(document.activeElement);\n		const rtl = getComputedStyle(tablist).direction === "rtl";\n		const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];\n		let next;\n		if (step) next = tabs[(i + step + tabs.length) % tabs.length];\n		else if (e.key === "Home") next = tabs[0];\n		else if (e.key === "End") next = tabs.at(-1);\n		if (!next || i < 0) return;\n		e.preventDefault();\n		selectTab(next, { focus: true });\n	});\n	// Find-in-page revealed a hidden panel: select its tab.\n	$$(\'[role="tabpanel"]\').forEach((panel) =>\n		panel.addEventListener("beforematch", () => {\n			const tab = document.getElementById(panel.getAttribute("aria-labelledby"));\n			if (tab) selectTab(tab, { push: false });\n		}),\n	);\n\n	/** Shows the tab holding an element, then scrolls to it. */\n	function reveal(el) {\n		const panel = el.closest(\'[role="tabpanel"]\');\n		const tab = panel && document.getElementById(panel.getAttribute("aria-labelledby"));\n		if (tab && tab.getAttribute("aria-selected") !== "true") selectTab(tab, { push: false });\n		const details = el.querySelector("details");\n		if (details) details.open = true;\n		el.scrollIntoView({ block: "start" });\n	}\n\n	document.addEventListener("click", (e) => {\n		const link = e.target.closest(\'a[href^="#f-"]\');\n		if (!link) return;\n		const target = document.getElementById(link.hash.slice(1));\n		if (!target) return;\n		e.preventDefault();\n		reveal(target);\n		history.replaceState(null, "", link.hash);\n	});\n\n	const initial = location.hash.slice(1);\n	const initialTab = document.getElementById(`tab-${initial}`);\n	if (initialTab) selectTab(initialTab, { push: false });\n	else if (initial && document.getElementById(initial)) reveal(document.getElementById(initial));\n\n	/* ---- Toolbars: one tab stop, arrow keys move (focusgroup fallback) --- */\n	$$(\'[role="toolbar"]\').forEach((bar) => {\n		if ("focusGroup" in HTMLElement.prototype) return bar.setAttribute("focusgroup", "toolbar wrap");\n		const items = () => $$("button", bar);\n		items().forEach((b, i) => (b.tabIndex = i ? -1 : 0));\n		bar.addEventListener("focusin", ({ target }) => {\n			if (items().includes(target)) items().forEach((b) => (b.tabIndex = b === target ? 0 : -1));\n		});\n		bar.addEventListener("keydown", (e) => {\n			const list = items();\n			const i = list.indexOf(document.activeElement);\n			if (i < 0) return;\n			const rtl = getComputedStyle(bar).direction === "rtl";\n			const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];\n			let next;\n			if (step) next = list[(i + step + list.length) % list.length];\n			else if (e.key === "Home") next = list[0];\n			else if (e.key === "End") next = list.at(-1);\n			if (!next) return;\n			e.preventDefault();\n			next.focus();\n		});\n	});\n\n	/** Presses one button in a segmented group. */\n	function press(group, button) {\n		$$("button", group).forEach((b) => b.setAttribute("aria-pressed", String(b === button)));\n	}\n\n	/* ---- Code: unified/split and collapse -------------------------------- */\n	const code = $(".code-main");\n	if (code) {\n		const setView = (view) => {\n			code.dataset.view = view;\n			press($(\'[aria-label="Diff layout"]\', code), $(`button[data-view="${view}"]`, code));\n		};\n		setView(store.get("view") === "split" ? "split" : "unified");\n		$(\'[aria-label="Diff layout"]\', code).addEventListener("click", (e) => {\n			const b = e.target.closest("button[data-view]");\n			if (!b) return;\n			setView(b.dataset.view);\n			store.set("view", b.dataset.view);\n		});\n		const collapse = $(\'[data-action="collapse"]\', code);\n		collapse.addEventListener("click", () => {\n			const open = collapse.textContent.startsWith("Expand");\n			$$(".file details", code).forEach((d) => (d.open = open));\n			collapse.textContent = open ? "Collapse all" : "Expand all";\n		});\n	}\n\n	/* ---- Visual: modes, sliders, swipe drag, zoom, pager ----------------- */\n	const viewer = $(".viewer");\n	if (viewer) {\n		const items = $$(".image-item", viewer);\n		const listButtons = $$(".filelist button", viewer.parentElement);\n		const modes = $(".modes", viewer);\n		let index = 0;\n\n		const current = () => items[index];\n\n		const FIT_HEIGHT = 420;\n\n		/** Sizes both versions by one scale so stacked modes stay aligned. Fit fills the stage. */\n		function applyZoom() {\n			const item = current();\n			const imgs = $$("img", item);\n			if (!imgs.every((img) => img.complete && img.naturalWidth)) {\n				imgs.forEach((img) => img.addEventListener("load", applyZoom, { once: true }));\n				return;\n			}\n			const zoom = viewer.dataset.zoom;\n			let scale = Number(zoom);\n			if (zoom === "fit") {\n				const stage = $(".stage", item);\n				const pad = parseFloat(getComputedStyle(stage).paddingLeft) * 2;\n				const columns = viewer.dataset.mode === "side" && !item.hasAttribute("data-single") ? 2 : 1;\n				const width = (stage.clientWidth - pad - (columns - 1) * 16) / columns;\n				const maxW = Math.max(...imgs.map((img) => img.naturalWidth));\n				const maxH = Math.max(...imgs.map((img) => img.naturalHeight));\n				scale = Math.min(width / maxW, FIT_HEIGHT / maxH);\n			}\n			imgs.forEach((img) => {\n				img.style.inlineSize = `${Math.round(img.naturalWidth * scale)}px`;\n				img.classList.toggle("upscaled", scale > 1);\n			});\n		}\n		new ResizeObserver(() => viewer.dataset.zoom === "fit" && applyZoom()).observe(viewer);\n\n		function syncModes() {\n			const single = current().hasAttribute("data-single");\n			$$("button", modes).forEach((b) => {\n				if (b.dataset.mode === "side") return;\n				if (single) b.setAttribute("aria-disabled", "true");\n				else b.removeAttribute("aria-disabled");\n			});\n		}\n\n		function show(i) {\n			index = (i + items.length) % items.length;\n			items.forEach((item, k) => (item.hidden = k !== index));\n			listButtons.forEach((b, k) => (k === index ? b.setAttribute("aria-current", "true") : b.removeAttribute("aria-current")));\n			$(".pager-count", viewer).textContent = `${index + 1} of ${items.length}`;\n			syncModes();\n			applyZoom();\n		}\n\n		// Natural dimensions under each image header.\n		items.forEach((item) =>\n			$$("img", item).forEach((img) => {\n				const write = () => {\n					const out = $(`[data-dims="${img.dataset.side}"]`, item);\n					if (out) out.textContent = `${img.dataset.side} ${img.naturalWidth}\xD7${img.naturalHeight}`;\n				};\n				if (img.complete && img.naturalWidth) write();\n				else img.addEventListener("load", write, { once: true });\n			}),\n		);\n\n		$(".toolbar", viewer).addEventListener("click", (e) => {\n			const b = e.target.closest("button");\n			if (!b || b.getAttribute("aria-disabled") === "true") return;\n			for (const key of ["mode", "bg", "zoom"]) {\n				if (b.dataset[key] === undefined) continue;\n				viewer.dataset[key] = b.dataset[key];\n				press(b.parentElement, b);\n				if (key !== "bg") applyZoom();\n				if (key !== "zoom") store.set(key, b.dataset[key]);\n			}\n		});\n		for (const key of ["mode", "bg"]) {\n			const saved = store.get(key);\n			const b = saved && $(`button[data-${key}="${saved}"]`, viewer);\n			if (b) {\n				viewer.dataset[key] = saved;\n				press(b.parentElement, b);\n			}\n		}\n\n		// Range inputs drive --opacity / --pos; keep the filled track in sync.\n		$$(\'input[type="range"]\', viewer).forEach((input) => {\n			const output = input.nextElementSibling;\n			const sync = () => {\n				const v = Number(input.value);\n				input.style.setProperty("--control-value", v);\n				input.style.setProperty("--attr-min", input.min || 0);\n				input.style.setProperty("--attr-max", input.max || 100);\n				viewer.style.setProperty(input.dataset.control === "opacity" ? "--opacity" : "--pos", input.dataset.control === "opacity" ? v / 100 : `${v}%`);\n				output.textContent = `${v}%`;\n			};\n			input.addEventListener("input", sync);\n			sync();\n		});\n\n		// Drag directly on the image in swipe mode.\n		const swipeInput = $(\'input[data-control="pos"]\', viewer);\n		items.forEach((item) => {\n			const layers = $(".layers", item);\n			const move = (e) => {\n				const box = layers.getBoundingClientRect();\n				swipeInput.value = String(Math.round(Math.min(100, Math.max(0, ((e.clientX - box.left) / box.width) * 100))));\n				swipeInput.dispatchEvent(new Event("input"));\n			};\n			layers.addEventListener("pointerdown", (e) => {\n				if (viewer.dataset.mode !== "swipe" || item.hasAttribute("data-single")) return;\n				layers.setPointerCapture(e.pointerId);\n				move(e);\n				layers.addEventListener("pointermove", move);\n				layers.addEventListener("pointerup", () => layers.removeEventListener("pointermove", move), { once: true });\n			});\n		});\n\n		listButtons.forEach((b, k) => b.addEventListener("click", () => show(k)));\n		$$("[data-step]", viewer).forEach((b) => b.addEventListener("click", () => show(index + Number(b.dataset.step))));\n		document.addEventListener("keydown", (e) => {\n			if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;\n			if ($("#panel-visual")?.hidden || e.target.closest("input, textarea, select, [contenteditable]")) return;\n			if (e.key === "j" || e.key === "k") show(index + (e.key === "j" ? 1 : -1));\n		});\n\n		show(0);\n	}\n})();\n';
+
+// src/page.js
+var INTRALINE_LIMIT = 1e3;
+var ICON = {
+  logo: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="12" height="12" rx="3" fill="currentColor" opacity=".35"/><rect x="9" y="9" width="12" height="12" rx="3" fill="currentColor"/></svg>',
+  side: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/></svg>',
+  overlay: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="13" height="13" rx="1.5"/><rect x="8" y="8" width="13" height="13" rx="1.5"/></svg>',
+  swipe: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M12 3v18"/></svg>',
+  diff: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>',
+  prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>'
+};
+var pathHtml = (path11) => {
+  const i = path11.lastIndexOf("/");
+  const inner = i === -1 ? `<span class="name">${escapeHtml(path11)}</span>` : `<span class="dir">${escapeHtml(path11.slice(0, i + 1))}</span><span class="name">${escapeHtml(path11.slice(i + 1))}</span>`;
+  return `<bdi>${inner}</bdi>`;
+};
+function deltaHtml(head, base) {
+  const d = (head ?? 0) - (base ?? 0);
+  if (d === 0) return '<span class="delta same">\u2014</span>';
+  const percent = head != null && base ? ` <small>${d > 0 ? "+" : ""}${(d / base * 100).toFixed(1)}%</small>` : "";
+  return `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "+" : "\u2212"}${escapeHtml(bytesToSize(Math.abs(d)))}${percent}</span>`;
+}
+var rowStatus = (head, base, hasBase) => {
+  if (!hasBase) return "added";
+  if (base == null) return "added";
+  if (head == null) return "removed";
+  return head === base ? "unchanged" : "modified";
+};
+function intraline(oldText, newText) {
+  if (oldText.length > INTRALINE_LIMIT || newText.length > INTRALINE_LIMIT) return [escapeHtml(oldText), escapeHtml(newText)];
+  let oldHtml = "";
+  let newHtml = "";
+  diffWordsWithSpace(oldText, newText).forEach(({ added, removed, value }) => {
+    if (added) newHtml += `<mark>${escapeHtml(value)}</mark>`;
+    else if (removed) oldHtml += `<mark>${escapeHtml(value)}</mark>`;
+    else {
+      oldHtml += escapeHtml(value);
+      newHtml += escapeHtml(value);
+    }
+  });
+  return [oldHtml, newHtml];
+}
+function walkHunk({ oldStart, newStart, lines: raw }) {
+  const lines = [];
+  const pairs = [];
+  let oldNo = oldStart;
+  let newNo = newStart;
+  let i = 0;
+  while (i < raw.length) {
+    const sign = raw[i][0];
+    if (sign === "-" || sign === "+") {
+      const dels = [];
+      const adds = [];
+      while (i < raw.length && raw[i][0] === "-") dels.push({ type: "del", oldNo: oldNo++, text: raw[i++].slice(1) });
+      while (i < raw.length && raw[i][0] === "+") adds.push({ type: "add", newNo: newNo++, text: raw[i++].slice(1) });
+      const count = Math.max(dels.length, adds.length);
+      for (let k = 0; k < count; k++) {
+        const del = dels[k];
+        const add = adds[k];
+        if (del && add) [del.html, add.html] = intraline(del.text, add.text);
+        else if (del) del.html = escapeHtml(del.text);
+        else add.html = escapeHtml(add.text);
+        pairs.push([del, add]);
+      }
+      lines.push(...dels, ...adds);
+    } else if (sign === "\\") {
+      const meta = { type: "meta", html: escapeHtml(raw[i++]) };
+      lines.push(meta);
+      pairs.push(meta);
+    } else {
+      const ctx = { type: "ctx", oldNo: oldNo++, newNo: newNo++, html: escapeHtml(raw[i++].slice(1)) };
+      lines.push(ctx);
+      pairs.push(ctx);
+    }
+  }
+  return { lines, pairs };
+}
+function renderDiff(hunks) {
+  const unified = [];
+  const split = [];
+  const sign = { add: "+", del: "-", ctx: " " };
+  hunks.forEach((hunk) => {
+    const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
+    unified.push(`<tr class="hunk"><td colspan="3">${header}</td></tr>`);
+    split.push(`<tr class="hunk"><td colspan="4">${header}</td></tr>`);
+    const { lines, pairs } = walkHunk(hunk);
     lines.forEach((line) => {
-      const sign = line[0];
-      const code = escapeHtml(line.slice(1));
-      if (sign === "+") rows.push(`<tr class="add"><td></td><td>${newNo++}</td><td>+${code}</td></tr>`);
-      else if (sign === "-") rows.push(`<tr class="del"><td>${oldNo++}</td><td></td><td>-${code}</td></tr>`);
-      else if (sign === "\\") rows.push(`<tr class="meta"><td></td><td></td><td>${escapeHtml(line)}</td></tr>`);
-      else rows.push(`<tr><td>${oldNo++}</td><td>${newNo++}</td><td> ${code}</td></tr>`);
+      if (line.type === "meta") return unified.push(`<tr class="meta"><td colspan="3">${line.html}</td></tr>`);
+      unified.push(`<tr class="${line.type}"><td class="ln">${line.oldNo ?? ""}</td><td class="ln">${line.newNo ?? ""}</td><td class="code"><span class="sign">${sign[line.type]}</span>${line.html}</td></tr>`);
+    });
+    pairs.forEach((pair) => {
+      if (!Array.isArray(pair)) {
+        if (pair.type === "meta") return split.push(`<tr class="meta"><td colspan="4">${pair.html}</td></tr>`);
+        return split.push(`<tr class="ctx"><td class="ln">${pair.oldNo}</td><td class="code">${pair.html}</td><td class="ln">${pair.newNo}</td><td class="code">${pair.html}</td></tr>`);
+      }
+      const [del, add] = pair;
+      const left = del ? `<td class="ln del">${del.oldNo}</td><td class="code del">${del.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
+      const right = add ? `<td class="ln add">${add.newNo}</td><td class="code add">${add.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
+      split.push(`<tr>${left}${right}</tr>`);
     });
   });
-  return `<table class="diff">${rows.join("")}</table>`;
+  return `<table class="diff unified">${unified.join("")}</table><table class="diff split"><colgroup><col class="ln-col"><col><col class="ln-col"><col></colgroup>${split.join("")}</table>`;
 }
-function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = /* @__PURE__ */ new Map(), context: context3 = "" }) {
-  const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
-  const pct = (v) => `${(barScale(v, max) * 100).toFixed(2)}%`;
-  const sizeRowsHtml = rows.map(({ packageName, file, headByteSize, baseByteSize }) => {
-    const delta = hasBase ? printChange(headByteSize, baseByteSize) : "";
-    const percent = hasBase ? printPercentChange(headByteSize, baseByteSize) : "";
-    const bars = [hasBase ? `<div class="bar base" style="width:${pct(baseByteSize)}" title="base ${escapeHtml(bytesToSize(baseByteSize))}"></div>` : "", `<div class="bar head" style="width:${pct(headByteSize)}" title="head ${escapeHtml(bytesToSize(headByteSize))}"></div>`].join("");
-    return `<tr><td>${escapeHtml(packageName)}</td><td><code>${escapeHtml(file)}</code></td>${hasBase ? `<td>${escapeHtml(bytesToSize(baseByteSize))}</td>` : ""}<td>${escapeHtml(bytesToSize(headByteSize))}</td>${hasBase ? `<td>${escapeHtml(delta)}${delta !== "-" && percent ? ` (${escapeHtml(percent)})` : ""}</td>` : ""}<td class="chart">${bars}</td></tr>`;
-  }).join("");
-  const sizesPanel = rows.length ? `<table class="sizes"><thead><tr><th>Package</th><th>File</th>${hasBase ? "<th>Base</th>" : ""}<th>Head</th>${hasBase ? "<th>\u0394</th>" : ""}<th>Chart <small title="Log scale, so small files stay visible">(log)</small>${hasBase ? ' <span class="key base">base</span> <span class="key head">head</span>' : ""}</th></tr></thead><tbody>${sizeRowsHtml}</tbody></table>` : "<p>No size changes.</p>";
-  const diffsPanel = changes.text.length ? changes.text.map((change) => {
-    const body = change.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(change.skipped)}.</p>` : renderDiffTable(change);
-    return `<details open class="file"><summary><code>${escapeHtml(change.file)}</code> <span class="status ${change.status}">${change.status}</span>${change.skipped ? "" : ` <span class="add">+${change.additions}</span> <span class="del">\u2212${change.deletions}</span>`}</summary>${body}</details>`;
-  }).join("") : "<p>No text changes.</p>";
-  const image = (url, label) => url ? `<figure><img src="${escapeHtml(url)}" alt="${label}" loading="lazy"><figcaption>${label}</figcaption></figure>` : `<figure class="empty"><figcaption>${label}: not available</figcaption></figure>`;
-  const visualPanel = changes.images.map(({ file, status, headByteSize, baseByteSize }) => {
-    const urls = imageUrls.get(file) ?? {};
-    return `<section class="image"><h3><code>${escapeHtml(file)}</code> <span class="status ${status}">${status}</span> <small>${escapeHtml(bytesToSize(baseByteSize))} \u2192 ${escapeHtml(bytesToSize(headByteSize))}</small></h3><div class="pair">${image(urls.base, "Base")}${image(urls.head, "Head")}</div></section>`;
-  }).join("");
-  const tabs = [["sizes", `Sizes (${rows.length})`, sizesPanel], ["diffs", `Line diffs (${changes.text.length})`, diffsPanel], ...changes.images.length ? [["visual", `Visual diffs (${changes.images.length})`, visualPanel]] : []];
+function renderCards({ hasBase, changes, totals }) {
   const { stats } = changes;
-  const totalLine = hasBase ? `${escapeHtml(bytesToSize(totals.baseTotal))} \u2192 ${escapeHtml(bytesToSize(totals.headTotal))} (${escapeHtml(printChange(totals.headTotal, totals.baseTotal))})` : escapeHtml(bytesToSize(totals.headTotal));
+  const files = stats.added + stats.removed + stats.modified;
+  const lines = stats.additions + stats.deletions;
+  const addShare = lines ? stats.additions / lines * 100 : 0;
+  const chip = (n, label, cls) => n ? `<span class="chip ${cls}">${n} ${label}</span>` : "";
+  return `<section class="cards" aria-label="Summary">
+<article class="card"><h2>Total size</h2><p class="metric">${escapeHtml(bytesToSize(totals.headTotal))}</p><p class="sub">${hasBase ? `${escapeHtml(bytesToSize(totals.baseTotal))} on base ${deltaHtml(totals.headTotal, totals.baseTotal)}` : "No base to compare"}</p></article>
+<article class="card"><h2>Files changed</h2><p class="metric">${files}</p><p class="sub chips">${chip(stats.added, "added", "added") + chip(stats.removed, "removed", "removed") + chip(stats.modified, "modified", "modified") || "No changes"}</p></article>
+<article class="card"><h2>Lines</h2><p class="metric"><span class="add">+${stats.additions}</span> <span class="del">\u2212${stats.deletions}</span></p><p class="sub"><span class="ratio" role="img" aria-label="${stats.additions} added, ${stats.deletions} removed"><span style="inline-size:${addShare.toFixed(1)}%"></span></span></p></article>
+<article class="card"><h2>Visual</h2><p class="metric">${changes.images.length}</p><p class="sub">${changes.images.length === 1 ? "image" : "images"} changed</p></article>
+</section>`;
+}
+function renderOverview({ rows, hasBase }, anchors) {
+  if (rows.length === 0) return '<p class="empty-state">No size changes.</p>';
+  const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
+  const pct = (v) => `${(barScale(v, max) * 100).toFixed(1)}%`;
+  const groups = /* @__PURE__ */ new Map();
+  rows.forEach((row) => {
+    const key = row.packageDir ?? row.packageName;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  const body = [...groups.values()].map((group2) => {
+    const { packageName, packageDir } = group2[0];
+    const head = group2.reduce((sum, r) => sum + (r.headByteSize ?? 0), 0);
+    const base = group2.reduce((sum, r) => sum + (r.baseByteSize ?? 0), 0);
+    const header = `<tr class="pkg"><th scope="rowgroup" colspan="2">${escapeHtml(packageName)} <span class="muted">${group2.length} ${group2.length === 1 ? "file" : "files"}</span></th>${hasBase ? `<td class="num">${escapeHtml(bytesToSize(base))}</td>` : ""}<td class="num">${escapeHtml(bytesToSize(head))}</td>${hasBase ? `<td class="num">${deltaHtml(head, base)}</td>` : ""}<td></td></tr>`;
+    const items = group2.map(({ file, headByteSize, baseByteSize }) => {
+      const status = rowStatus(headByteSize, baseByteSize, hasBase);
+      const path11 = packageDir ? [...anchors.keys()].find((p) => p.startsWith(`${packageDir}/`) && p.endsWith(`/${file}`)) : void 0;
+      const name = path11 ? `<a href="#${anchors.get(path11)}">${escapeHtml(file)}</a>` : escapeHtml(file);
+      const bars = `${hasBase ? `<span class="bar base" style="inline-size:${pct(baseByteSize)}"></span>` : ""}<span class="bar head" style="inline-size:${pct(headByteSize)}"></span>`;
+      return `<tr><td><span class="dot ${status}" title="${status}"></span><span class="sr-only">${status}</span></td><td class="file-cell">${name}</td>${hasBase ? `<td class="num">${escapeHtml(bytesToSize(baseByteSize))}</td>` : ""}<td class="num">${escapeHtml(bytesToSize(headByteSize))}</td>${hasBase ? `<td class="num">${deltaHtml(headByteSize, baseByteSize)}</td>` : ""}<td class="chart" aria-hidden="true">${bars}</td></tr>`;
+    });
+    return `<tbody>${header}${items.join("")}</tbody>`;
+  }).join("");
+  return `<div class="table-card"><table class="sizes">
+<thead><tr><th scope="col"><span class="sr-only">Status</span></th><th scope="col">File</th>${hasBase ? '<th scope="col" class="num">Base</th>' : ""}<th scope="col" class="num">Head</th>${hasBase ? '<th scope="col" class="num">Change</th>' : ""}<th scope="col" class="chart">Size <span class="muted">(log)</span>${hasBase ? ' <span class="key base">base</span><span class="key head">head</span>' : ""}</th></tr></thead>
+${body}</table></div>`;
+}
+function renderFileList(items, label, buttons = false) {
+  const entries = items.map(({ id, file, status, meta }, i) => {
+    const inner = `<span class="dot ${status}" title="${status}"></span><span class="path">${pathHtml(file)}</span><span class="meta">${meta}</span>`;
+    return `<li>${buttons ? `<button type="button" data-target="${id}"${i === 0 ? ' aria-current="true"' : ""}>${inner}</button>` : `<a href="#${id}">${inner}</a>`}</li>`;
+  });
+  return `<nav class="filelist" aria-label="${escapeHtml(label)}"><ul>${entries.join("")}</ul></nav>`;
+}
+function renderCode({ changes }, anchors) {
+  if (changes.text.length === 0) return '<p class="empty-state">No text changes.</p>';
+  const counts = (c) => c.skipped ? '<span class="muted">skipped</span>' : `<span class="add">+${c.additions}</span> <span class="del">\u2212${c.deletions}</span>`;
+  const list = renderFileList(
+    changes.text.map((c) => ({ id: anchors.get(c.file), file: c.file, status: c.status, meta: counts(c) })),
+    "Changed files"
+  );
+  const files = changes.text.map((c) => {
+    const body = c.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(c.skipped)}.</p>` : `<div class="diff-scroll">${renderDiff(c.hunks)}</div>`;
+    return `<section class="file" id="${anchors.get(c.file)}"><details open><summary><span class="chev">${ICON.chevron}</span><span class="pill ${c.status}">${c.status}</span><span class="path">${pathHtml(c.file)}</span><span class="meta">${counts(c)}</span></summary>${body}</details></section>`;
+  }).join("");
+  return `<div class="layout">${list}<div class="main code-main" data-view="unified">
+<div class="toolbar" role="toolbar" aria-label="Diff options">
+<div class="segmented" role="group" aria-label="Diff layout"><button type="button" data-view="unified" aria-pressed="true">Unified</button><button type="button" data-view="split" aria-pressed="false">Split</button></div>
+<span class="spacer"></span>
+<button type="button" class="ghost" data-action="collapse">Collapse all</button>
+</div>
+${files}</div></div>`;
+}
+function renderVisual({ changes, imageUrls = /* @__PURE__ */ new Map() }) {
+  if (changes.images.length === 0) return "";
+  const items = changes.images.map((img, i) => ({ ...img, id: `img-${i}`, urls: imageUrls.get(img.file) ?? {} }));
+  const list = renderFileList(
+    items.map(({ id, file, status, baseByteSize, headByteSize }) => ({ id, file, status, meta: deltaHtml(headByteSize, baseByteSize) })),
+    "Changed images",
+    true
+  );
+  const figure = (side, url) => url ? `<figure class="layer ${side}"><img src="${escapeHtml(url)}" alt="${side === "base" ? "Base" : "Head"} version" decoding="async" data-side="${side}"><figcaption>${side === "base" ? "Base" : "Head"}</figcaption></figure>` : `<figure class="layer ${side} missing"><figcaption>${side === "base" ? "Base" : "Head"}: not available</figcaption></figure>`;
+  const viewers = items.map(({ id, file, status, urls, baseByteSize, headByteSize }, i) => {
+    const single = !(urls.base && urls.head);
+    return `<section class="image-item" id="${id}"${i ? " hidden" : ""}${single ? " data-single" : ""} aria-label="${escapeHtml(file)}">
+<header class="image-head"><span class="pill ${status}">${status}</span><span class="path">${pathHtml(file)}</span><span class="meta">${escapeHtml(bytesToSize(baseByteSize))} \u2192 ${escapeHtml(bytesToSize(headByteSize))} ${deltaHtml(headByteSize, baseByteSize)}</span><span class="meta dims"><span data-dims="base"></span><span data-dims="head"></span></span></header>
+<div class="stage"><div class="layers">${figure("base", urls.base)}${figure("head", urls.head)}<span class="divider" aria-hidden="true"></span><span class="tag tag-base" aria-hidden="true">Base</span><span class="tag tag-head" aria-hidden="true">Head</span></div></div>
+${single ? `<p class="note">${status === "added" ? "New image: there's no base version to compare." : status === "removed" ? "Removed image: there's no head version to compare." : "Only one version could be included."}</p>` : ""}
+</section>`;
+  }).join("");
+  const button = (attr, value, label, pressed, icon = "") => `<button type="button" data-${attr}="${value}" aria-pressed="${pressed}">${icon}<span>${label}</span></button>`;
+  return `<div class="layout">${list}<div class="main viewer" data-mode="side" data-bg="checker" data-zoom="fit" style="--opacity:0.5;--pos:50%">
+<div class="toolbar" role="toolbar" aria-label="Compare options">
+<div class="segmented modes" role="group" aria-label="Compare mode">${button("mode", "side", "Side by side", true, ICON.side)}${button("mode", "overlay", "Overlay", false, ICON.overlay)}${button("mode", "swipe", "Swipe", false, ICON.swipe)}${button("mode", "diff", "Difference", false, ICON.diff)}</div>
+<span class="spacer"></span>
+<div class="segmented" role="group" aria-label="Background">${button("bg", "checker", "Checker", true)}${button("bg", "light", "Light", false)}${button("bg", "dark", "Dark", false)}</div>
+<div class="segmented" role="group" aria-label="Zoom">${button("zoom", "fit", "Fit", true)}${button("zoom", "1", "1\xD7", false)}${button("zoom", "2", "2\xD7", false)}${button("zoom", "4", "4\xD7", false)}</div>
+</div>
+<div class="sliders">
+<label class="slider-field opacity-field">Head opacity <input type="range" min="0" max="100" value="50" data-control="opacity"> <output>50%</output></label>
+<label class="slider-field swipe-field">Swipe position <input type="range" min="0" max="100" value="50" data-control="pos"> <output>50%</output></label>
+<p class="hint diff-hint">Matching pixels turn black; changes stay bright.</p>
+<p class="hint side-hint">Use Overlay, Swipe or Difference to compare in place.</p>
+</div>
+${viewers}
+<div class="pager"><button type="button" class="ghost" data-step="-1">${ICON.prev}<span>Previous</span></button><span class="pager-count" aria-live="polite">1 of ${items.length}</span><button type="button" class="ghost" data-step="1"><span>Next</span>${ICON.next}</button><span class="hint"><kbd>J</kbd> / <kbd>K</kbd> to switch images</span></div>
+</div></div>`;
+}
+function renderHtml(options) {
+  const { title, rows, changes, context: context3 = "" } = options;
+  const anchors = new Map(changes.text.map((c, i) => [c.file, `f-${i}`]));
+  const tabs = [["overview", "Overview", rows.length, renderOverview(options, anchors)], ["code", "Code", changes.text.length, renderCode(options, anchors)], ...changes.images.length ? [["visual", "Visual", changes.images.length, renderVisual(options)]] : []];
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
 <style>
@@ -29120,37 +30665,17 @@ ${report_page_default}
 </style>
 </head>
 <body>
-<main>
-<h1>${escapeHtml(title)}</h1>
-${context3 ? `<p class="meta-line">${escapeHtml(context3)}</p>` : ""}
-<ul class="stats"><li><b>Total</b>: ${totalLine}</li><li><b>Files</b>: ${stats.added} added, ${stats.removed} removed, ${stats.modified} modified</li><li><b>Lines</b>: <span class="add">+${stats.additions}</span> / <span class="del">\u2212${stats.deletions}</span></li></ul>
-<div role="tablist" aria-label="Report sections" hidden>${tabs.map(([id, label], i) => `<button role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(label)}</button>`).join("")}</div>
-${tabs.map(([id, label, html]) => `<section role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}"><h2 class="panel-title">${escapeHtml(label)}</h2>${html}</section>`).join("\n")}
+<header class="topbar"><div class="wrap topbar-inner"><span class="brand">${ICON.logo}<span>${escapeHtml(title)}</span></span>${context3 ? `<span class="context">${escapeHtml(context3)}</span>` : ""}</div></header>
+<main class="wrap">
+${renderCards(options)}
+<div class="tabs">
+<div class="tablist" role="tablist" aria-label="Report sections">${tabs.map(([id, label, count], i) => `<button type="button" role="tab" id="tab-${id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${label}<span class="count">${count}</span></button>`).join("")}</div>
+${tabs.map(([id, , , html], i) => `<div role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}"${i ? ' hidden="until-found"' : ""}><div class="panel">${html}</div></div>`).join("\n")}
+</div>
 </main>
+<footer class="wrap footer">Generated by <a href="https://github.com/allonsy-studio/actions-file-diff">actions-file-diff</a></footer>
 <script>
-(() => {
-	const list = document.querySelector('[role=tablist]');
-	const tabs = [...list.querySelectorAll('[role=tab]')];
-	const select = (tab) => tabs.forEach((t) => {
-		const on = t === tab;
-		t.setAttribute('aria-selected', on);
-		t.tabIndex = on ? 0 : -1;
-		document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
-	});
-	list.hidden = false;
-	document.querySelectorAll('.panel-title').forEach((h) => (h.hidden = true));
-	list.addEventListener('click', (e) => { const t = e.target.closest('[role=tab]'); if (t) select(t); });
-	list.addEventListener('keydown', (e) => {
-		const i = tabs.indexOf(document.activeElement);
-		const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
-		if (next === undefined || i < 0) return;
-		e.preventDefault();
-		const t = tabs[(next + tabs.length) % tabs.length];
-		t.focus();
-		select(t);
-	});
-	select(tabs.find((t) => location.hash === '#' + t.id.slice(4)) ?? tabs[0]);
-})();
+${report_page_client_default}
 </script>
 </body>
 </html>

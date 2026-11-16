@@ -7,12 +7,12 @@ export default {
 	testEnvironment: "node",
 	testMatch: ["**/src/*.test.js"],
 	// Mirror the esbuild text loader for the report stylesheet.
-	transform: { "\\.css$": "<rootDir>/scripts/jest-text-transform.cjs" },
+	transform: { "\\.css$|\\.client\\.js$": "<rootDir>/scripts/jest-text-transform.cjs" },
 	verbose: true,
 	// Unit-test the logic modules. The action
 	// entry shell (index.js) is exercised by the self-test workflow in
 	// .github/workflows/self-test.yml.
-	collectCoverageFrom: ["src/changes.js", "src/publish.js", "src/render.js", "src/report.js", "src/utilities.js"],
+	collectCoverageFrom: ["src/changes.js", "src/page.js", "src/publish.js", "src/render.js", "src/report.js", "src/utilities.js"],
 	coverageDirectory: "./coverage",
 	coverageReporters: isCI ? ["cobertura", "json"] : ["text", "text-summary"],
 	// Regression ratchet set just under the current per-file coverage; jest
@@ -24,6 +24,12 @@ export default {
 			functions: 100,
 			lines: 92,
 			statements: 90,
+		},
+		"src/page.js": {
+			branches: 80,
+			functions: 95,
+			lines: 95,
+			statements: 95,
 		},
 		"src/publish.js": {
 			branches: 75,

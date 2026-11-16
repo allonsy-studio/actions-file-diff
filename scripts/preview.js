@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 
 import * as esbuild from "esbuild";
 
+import { sharedOptions } from "./build.js";
 import { makePreviewFixture } from "./preview-fixture.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -41,15 +42,12 @@ async function renderAll() {
 const ctx = await esbuild.context({
 	entryPoints: [join(root, "scripts/preview-render.js")],
 	outfile: bundle,
-	bundle: true,
-	platform: "node",
+	...sharedOptions,
 	format: "esm",
-	target: "node24",
-	loader: { ".css": "text" },
-	logLevel: "warning",
 	// CJS deps (@actions/*) call require(); give the ESM bundle one.
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 	plugins: [
+		...sharedOptions.plugins,
 		{
 			name: "render-on-build",
 			setup(build) {

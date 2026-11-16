@@ -11,7 +11,8 @@ import { context, getOctokit } from "@actions/github";
 
 import { collectChanges, DEFAULT_MAX_DIFF_SIZE } from "./changes.js";
 import { DEFAULT_REPORT_BRANCH, publishToBranch, reportDir, reportUrl } from "./publish.js";
-import { renderStats, reportFiles, renderSummaryMarkdown, sizeRows, SUMMARY_BUDGET } from "./render.js";
+import { reportFiles } from "./page.js";
+import { renderStats, renderSummaryMarkdown, sizeRows, SUMMARY_BUDGET } from "./render.js";
 import { buildReport, commentMarker, DEFAULT_BUILD_DIR, DEFAULT_MAIN_FILE } from "./report.js";
 import { addComment, fetchFilesAndSizes } from "./utilities.js";
 

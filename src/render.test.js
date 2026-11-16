@@ -1,9 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import { MAX_IMAGE_SIZE } from "./changes.js";
-import { barScale, escapeHtml, fenceFor, renderHtml, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, reportFiles, sizeRows, textBar, unifiedDiff } from "./render.js";
+import { barScale, escapeHtml, fenceFor, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, sizeRows, textBar, unifiedDiff } from "./render.js";
 
 const stats = { added: 1, removed: 0, modified: 1, additions: 3, deletions: 1 };
 
@@ -113,67 +108,5 @@ describe("renderSummaryMarkdown", () => {
 		expect(md).toContain("1 diff(s) omitted");
 		expect(md).toContain("[full report](https://x/pr-1/)");
 		expect(md).not.toContain("Visual diffs");
-	});
-});
-
-describe("renderHtml", () => {
-	const changes = { stats, text: [change("<x>.css")], images: [] };
-	const totals = { headTotal: 200, baseTotal: 150 };
-
-	it("renders two tabs without images and escapes content", () => {
-		const html = renderHtml({ title: "Report", rows, hasBase: true, changes, totals });
-		expect(html).toContain('id="tab-sizes"');
-		expect(html).toContain('id="tab-diffs"');
-		expect(html).not.toContain('id="tab-visual"');
-		expect(html).toContain("&lt;x&gt;.css");
-		expect(html).not.toContain("<x>.css");
-	});
-
-	it("hides line counts for skipped files", () => {
-		const skipped = { stats, text: [change("bin.dat", { skipped: "binary file", hunks: [], additions: 0, deletions: 0 })], images: [] };
-		const html = renderHtml({ title: "Report", rows, hasBase: true, changes: skipped, totals });
-		expect(html).toContain('<span class="status modified">modified</span></summary>');
-		expect(html).not.toContain('<span class="add">+0</span>');
-	});
-
-	it("adds the visual tab with image URLs", () => {
-		const images = [{ file: "i.png", status: "modified", headByteSize: 2, baseByteSize: 1 }];
-		const imageUrls = new Map([["i.png", { head: "images/head/i.png" }]]);
-		const html = renderHtml({ title: "Report", rows, hasBase: true, changes: { ...changes, images }, totals, imageUrls, context: "o/r#1" });
-		expect(html).toContain('id="tab-visual"');
-		expect(html).toContain('src="images/head/i.png"');
-		expect(html).toContain("Base: not available");
-		expect(html).toContain("o/r#1");
-	});
-
-	it("drops base columns when there is no base", () => {
-		const html = renderHtml({ title: "Report", rows, hasBase: false, changes, totals });
-		expect(html).not.toContain("<th>Base</th>");
-	});
-});
-
-describe("reportFiles", () => {
-	let dir;
-
-	beforeEach(() => {
-		dir = mkdtempSync(join(tmpdir(), "report-files-"));
-	});
-
-	afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-	it("returns the page plus images, skipping oversized ones", () => {
-		writeFileSync(join(dir, "head.png"), "head");
-		writeFileSync(join(dir, "base.png"), "base");
-		const images = [
-			{ file: "a b/logo.png", status: "modified", headByteSize: 4, baseByteSize: 4, headPath: join(dir, "head.png"), basePath: join(dir, "base.png") },
-			{ file: "big.png", status: "added", headByteSize: MAX_IMAGE_SIZE + 1, headPath: join(dir, "head.png") },
-		];
-		const files = reportFiles({ title: "Report", rows, hasBase: true, changes: { stats, text: [], images }, totals: { headTotal: 1, baseTotal: 1 } });
-
-		expect(files.map(({ path }) => path)).toEqual(["images/head/a b/logo.png", "images/base/a b/logo.png", "index.html"]);
-		expect(String(files[0].content)).toBe("head");
-		const html = String(files.at(-1).content);
-		expect(html).toContain('src="images/head/a%20b/logo.png"');
-		expect(html).toContain("Head: not available");
 	});
 });

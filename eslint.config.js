@@ -33,6 +33,11 @@ export default defineConfig([
 			"no-warning-comments": ["warn", { terms: ["todo", "fixme", "xxx"], location: "anywhere" }],
 		},
 	},
+	// Inlined into the published report page; runs in the browser.
+	{
+		files: ["src/*.client.js"],
+		languageOptions: { sourceType: "script", globals: globals.browser },
+	},
 	// Specific to tooling and repository-management scripts.
 	{
 		files: ["scripts/**/*.js"],

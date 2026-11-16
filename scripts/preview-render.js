@@ -8,7 +8,8 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { collectChanges } from "../src/changes.js";
-import { renderStats, renderSummaryMarkdown, reportFiles, sizeRows } from "../src/render.js";
+import { reportFiles } from "../src/page.js";
+import { renderStats, renderSummaryMarkdown, sizeRows } from "../src/render.js";
 import { buildReport } from "../src/report.js";
 import { fetchFilesAndSizes } from "../src/utilities.js";
 

@@ -123,11 +123,13 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 
 The comment includes a stats line (files added, removed and modified; lines added and removed) and a link to a visual diff. Nothing is uploaded as a workflow artifact, so it uses no artifact storage.
 
-The visual diff has three parts:
+The visual diff opens with summary cards (total size, files changed, lines, images), then has three parts:
 
-1. **Sizes**: base and head size per changed file, with bars.
-2. **Line diffs**: a unified diff per changed text file. Minified, `.gz` and `.map` siblings are skipped. Binary files and files over `max-diff-size` are listed without a diff.
-3. **Visual diffs**: base and head side by side for changed images (`png`, `jpg`, `gif`, `svg`, `webp`, `avif`, `ico`, `bmp`). Only shown when an image changed.
+1. **Overview**: base and head size per file, grouped by package, with log-scale bars. File names link to their diff.
+2. **Code**: a diff per changed text file, with a file list, unified or split layout, and word-level highlights. Minified, `.gz` and `.map` siblings are skipped. Binary files and files over `max-diff-size` are listed without a diff.
+3. **Visual**: changed images (`png`, `jpg`, `gif`, `svg`, `webp`, `avif`, `ico`, `bmp`), compared side by side, as an overlay with an opacity slider, with a swipe slider (drag the image or use the range control), or as a difference blend. Background (checker, light, dark) and zoom (fit, 1×, 2×, 4×) controls; <kbd>J</kbd>/<kbd>K</kbd> switch images. Only shown when an image changed.
+
+The full page (cards, tabs, split view and image compare modes) needs `visual-diff: branch`. The job summary shows the same data as collapsible sections without the interactive controls.
 
 ### `visual-diff: summary` (default)
 
