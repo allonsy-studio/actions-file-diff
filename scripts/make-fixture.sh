@@ -7,7 +7,8 @@
 # trees whose only differences are file sizes and one file that exists in the
 # base but not the head. Files hold printable text so the line-diff report has
 # something to show. Expected head total: foo 50 (index.min.css) + 200
-# (icon.svg) + bar 5000 (index.js) = 5250 bytes.
+# (icon.svg) + bar 5000 (index.js) = 5250 bytes. The head also holds a symlink
+# to a file outside both trees; the action must ignore it, so the total stays 5250.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -42,6 +43,9 @@ rm -rf "${root}/head" "${root}/base"
 make_file "${root}/head/packages/foo/dist/index.css" 100
 make_file "${root}/head/packages/foo/dist/index.min.css" 50
 make_file "${root}/head/packages/foo/dist/index.min.css.gz" 20
+# A link to a file outside the trees. If the action followed it, the 700 bytes would join the total.
+make_file "${root}/outside.txt" 700
+ln -s "${root}/outside.txt" "${root}/head/packages/foo/dist/link.css"
 make_svg "${root}/head/packages/foo/dist/icon.svg" 200 "#0969da"
 write_text "${root}/head/packages/foo/package.json" '{"name":"foo","main":"dist/index.css"}'
 make_file "${root}/head/packages/bar/dist/index.js" 5000

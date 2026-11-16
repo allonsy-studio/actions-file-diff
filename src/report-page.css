@@ -622,6 +622,9 @@ button.ghost {
 	background: var(--surface);
 	box-shadow: var(--shadow);
 	scroll-margin-block-start: calc(var(--topbar) + 12px);
+	/* Skip layout and paint for files scrolled out of view; the size is remembered once they render. */
+	content-visibility: auto;
+	contain-intrinsic-size: auto none auto 150px;
 }
 
 .file summary {
@@ -758,11 +761,6 @@ button.ghost {
 
 .diff.split td.code + td.ln {
 	border-inline-start: 1px solid var(--line);
-}
-
-.code-main[data-view="unified"] .diff.split,
-.code-main[data-view="split"] .diff.unified {
-	display: none;
 }
 
 /* ---- Visual viewer ----------------------------------------------------- */

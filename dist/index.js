@@ -10944,7 +10944,7 @@ var require_mock_interceptor = __commonJS({
 var require_mock_client = __commonJS({
   "node_modules/undici/lib/mock/mock-client.js"(exports, module) {
     "use strict";
-    var { promisify } = __require("node:util");
+    var { promisify: promisify2 } = __require("node:util");
     var Client = require_client();
     var { buildMockDispatch } = require_mock_utils();
     var {
@@ -10984,7 +10984,7 @@ var require_mock_client = __commonJS({
         return new MockInterceptor(opts, this[kDispatches]);
       }
       async [kClose]() {
-        await promisify(this[kOriginalClose])();
+        await promisify2(this[kOriginalClose])();
         this[kConnected] = 0;
         this[kMockAgent][Symbols.kClients].delete(this[kOrigin]);
       }
@@ -10997,7 +10997,7 @@ var require_mock_client = __commonJS({
 var require_mock_pool = __commonJS({
   "node_modules/undici/lib/mock/mock-pool.js"(exports, module) {
     "use strict";
-    var { promisify } = __require("node:util");
+    var { promisify: promisify2 } = __require("node:util");
     var Pool = require_pool();
     var { buildMockDispatch } = require_mock_utils();
     var {
@@ -11037,7 +11037,7 @@ var require_mock_pool = __commonJS({
         return new MockInterceptor(opts, this[kDispatches]);
       }
       async [kClose]() {
-        await promisify(this[kOriginalClose])();
+        await promisify2(this[kOriginalClose])();
         this[kConnected] = 0;
         this[kMockAgent][Symbols.kClients].delete(this[kOrigin]);
       }
@@ -25677,648 +25677,18 @@ function getOctokit(token, options, ...additionalPlugins) {
 }
 
 // src/changes.js
-import { readFileSync as readFileSync3 } from "node:fs";
+import { execFile } from "node:child_process";
+import { closeSync, openSync, readSync } from "node:fs";
+import { devNull, tmpdir } from "node:os";
 import { join as join6 } from "node:path";
-
-// node_modules/diff/libesm/diff/base.js
-var Diff = class {
-  diff(oldStr, newStr, options = {}) {
-    let callback;
-    if (typeof options === "function") {
-      callback = options;
-      options = {};
-    } else if ("callback" in options) {
-      callback = options.callback;
-    }
-    const oldString = this.castInput(oldStr, options);
-    const newString = this.castInput(newStr, options);
-    const oldTokens = this.removeEmpty(this.tokenize(oldString, options));
-    const newTokens = this.removeEmpty(this.tokenize(newString, options));
-    return this.diffWithOptionsObj(oldTokens, newTokens, options, callback);
-  }
-  diffWithOptionsObj(oldTokens, newTokens, options, callback) {
-    var _a2;
-    const done = (value) => {
-      value = this.postProcess(value, options);
-      if (callback) {
-        setTimeout(function() {
-          callback(value);
-        }, 0);
-        return void 0;
-      } else {
-        return value;
-      }
-    };
-    const newLen = newTokens.length, oldLen = oldTokens.length;
-    let editLength = 1;
-    let maxEditLength = newLen + oldLen;
-    if (options.maxEditLength != null) {
-      maxEditLength = Math.min(maxEditLength, options.maxEditLength);
-    }
-    const maxExecutionTime = (_a2 = options.timeout) !== null && _a2 !== void 0 ? _a2 : Infinity;
-    const abortAfterTimestamp = Date.now() + maxExecutionTime;
-    const bestPath = [{ oldPos: -1, lastComponent: void 0 }];
-    let newPos = this.extractCommon(bestPath[0], newTokens, oldTokens, 0, options);
-    if (bestPath[0].oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
-      return done(this.buildValues(bestPath[0].lastComponent, newTokens, oldTokens));
-    }
-    let minDiagonalToConsider = -Infinity, maxDiagonalToConsider = Infinity;
-    const execEditLength = () => {
-      for (let diagonalPath = Math.max(minDiagonalToConsider, -editLength); diagonalPath <= Math.min(maxDiagonalToConsider, editLength); diagonalPath += 2) {
-        let basePath;
-        const removePath = bestPath[diagonalPath - 1], addPath2 = bestPath[diagonalPath + 1];
-        if (removePath) {
-          bestPath[diagonalPath - 1] = void 0;
-        }
-        let canAdd = false;
-        if (addPath2) {
-          const addPathNewPos = addPath2.oldPos - diagonalPath;
-          canAdd = addPath2 && 0 <= addPathNewPos && addPathNewPos < newLen;
-        }
-        const canRemove = removePath && removePath.oldPos + 1 < oldLen;
-        if (!canAdd && !canRemove) {
-          bestPath[diagonalPath] = void 0;
-          continue;
-        }
-        if (!canRemove || canAdd && removePath.oldPos < addPath2.oldPos) {
-          basePath = this.addToPath(addPath2, true, false, 0, options);
-        } else {
-          basePath = this.addToPath(removePath, false, true, 1, options);
-        }
-        newPos = this.extractCommon(basePath, newTokens, oldTokens, diagonalPath, options);
-        if (basePath.oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
-          return done(this.buildValues(basePath.lastComponent, newTokens, oldTokens)) || true;
-        } else {
-          bestPath[diagonalPath] = basePath;
-          if (basePath.oldPos + 1 >= oldLen) {
-            maxDiagonalToConsider = Math.min(maxDiagonalToConsider, diagonalPath - 1);
-          }
-          if (newPos + 1 >= newLen) {
-            minDiagonalToConsider = Math.max(minDiagonalToConsider, diagonalPath + 1);
-          }
-        }
-      }
-      editLength++;
-    };
-    if (callback) {
-      (function exec2() {
-        setTimeout(function() {
-          if (editLength > maxEditLength || Date.now() > abortAfterTimestamp) {
-            return callback(void 0);
-          }
-          if (!execEditLength()) {
-            exec2();
-          }
-        }, 0);
-      })();
-    } else {
-      while (editLength <= maxEditLength && Date.now() <= abortAfterTimestamp) {
-        const ret = execEditLength();
-        if (ret) {
-          return ret;
-        }
-      }
-    }
-  }
-  addToPath(path11, added, removed, oldPosInc, options) {
-    const last = path11.lastComponent;
-    if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
-      return {
-        oldPos: path11.oldPos + oldPosInc,
-        lastComponent: { count: last.count + 1, added, removed, previousComponent: last.previousComponent }
-      };
-    } else {
-      return {
-        oldPos: path11.oldPos + oldPosInc,
-        lastComponent: { count: 1, added, removed, previousComponent: last }
-      };
-    }
-  }
-  extractCommon(basePath, newTokens, oldTokens, diagonalPath, options) {
-    const newLen = newTokens.length, oldLen = oldTokens.length;
-    let oldPos = basePath.oldPos, newPos = oldPos - diagonalPath, commonCount = 0;
-    while (newPos + 1 < newLen && oldPos + 1 < oldLen && this.equals(oldTokens[oldPos + 1], newTokens[newPos + 1], options)) {
-      newPos++;
-      oldPos++;
-      commonCount++;
-      if (options.oneChangePerToken) {
-        basePath.lastComponent = { count: 1, previousComponent: basePath.lastComponent, added: false, removed: false };
-      }
-    }
-    if (commonCount && !options.oneChangePerToken) {
-      basePath.lastComponent = { count: commonCount, previousComponent: basePath.lastComponent, added: false, removed: false };
-    }
-    basePath.oldPos = oldPos;
-    return newPos;
-  }
-  equals(left, right, options) {
-    if (options.comparator) {
-      return options.comparator(left, right);
-    } else {
-      return left === right || !!options.ignoreCase && left.toLowerCase() === right.toLowerCase();
-    }
-  }
-  removeEmpty(array) {
-    const ret = [];
-    for (let i = 0; i < array.length; i++) {
-      if (array[i]) {
-        ret.push(array[i]);
-      }
-    }
-    return ret;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  castInput(value, options) {
-    return value;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tokenize(value, options) {
-    return Array.from(value);
-  }
-  join(chars) {
-    return chars.join("");
-  }
-  postProcess(changeObjects, options) {
-    return changeObjects;
-  }
-  get useLongestToken() {
-    return false;
-  }
-  buildValues(lastComponent, newTokens, oldTokens) {
-    const components = [];
-    let nextComponent;
-    while (lastComponent) {
-      components.push(lastComponent);
-      nextComponent = lastComponent.previousComponent;
-      delete lastComponent.previousComponent;
-      lastComponent = nextComponent;
-    }
-    components.reverse();
-    const componentLen = components.length;
-    let componentPos = 0, newPos = 0, oldPos = 0;
-    for (; componentPos < componentLen; componentPos++) {
-      const component = components[componentPos];
-      if (!component.removed) {
-        if (!component.added && this.useLongestToken) {
-          let value = newTokens.slice(newPos, newPos + component.count);
-          value = value.map(function(value2, i) {
-            const oldValue = oldTokens[oldPos + i];
-            return oldValue.length > value2.length ? oldValue : value2;
-          });
-          component.value = this.join(value);
-        } else {
-          component.value = this.join(newTokens.slice(newPos, newPos + component.count));
-        }
-        newPos += component.count;
-        if (!component.added) {
-          oldPos += component.count;
-        }
-      } else {
-        component.value = this.join(oldTokens.slice(oldPos, oldPos + component.count));
-        oldPos += component.count;
-      }
-    }
-    return components;
-  }
-};
-
-// node_modules/diff/libesm/util/string.js
-function longestCommonPrefix(str1, str2) {
-  let i;
-  for (i = 0; i < str1.length && i < str2.length; i++) {
-    if (str1[i] != str2[i]) {
-      return str1.slice(0, i);
-    }
-  }
-  return str1.slice(0, i);
-}
-function longestCommonSuffix(str1, str2) {
-  let i;
-  if (!str1 || !str2 || str1[str1.length - 1] != str2[str2.length - 1]) {
-    return "";
-  }
-  for (i = 0; i < str1.length && i < str2.length; i++) {
-    if (str1[str1.length - (i + 1)] != str2[str2.length - (i + 1)]) {
-      return str1.slice(-i);
-    }
-  }
-  return str1.slice(-i);
-}
-function replacePrefix(string, oldPrefix, newPrefix) {
-  if (string.slice(0, oldPrefix.length) != oldPrefix) {
-    throw Error(`string ${JSON.stringify(string)} doesn't start with prefix ${JSON.stringify(oldPrefix)}; this is a bug`);
-  }
-  return newPrefix + string.slice(oldPrefix.length);
-}
-function replaceSuffix(string, oldSuffix, newSuffix) {
-  if (!oldSuffix) {
-    return string + newSuffix;
-  }
-  if (string.slice(-oldSuffix.length) != oldSuffix) {
-    throw Error(`string ${JSON.stringify(string)} doesn't end with suffix ${JSON.stringify(oldSuffix)}; this is a bug`);
-  }
-  return string.slice(0, -oldSuffix.length) + newSuffix;
-}
-function removePrefix(string, oldPrefix) {
-  return replacePrefix(string, oldPrefix, "");
-}
-function removeSuffix(string, oldSuffix) {
-  return replaceSuffix(string, oldSuffix, "");
-}
-function maximumOverlap(string1, string2) {
-  return string2.slice(0, overlapCount(string1, string2));
-}
-function overlapCount(a, b) {
-  let startA = 0;
-  if (a.length > b.length) {
-    startA = a.length - b.length;
-  }
-  let endB = b.length;
-  if (a.length < b.length) {
-    endB = a.length;
-  }
-  const map = Array(endB);
-  let k = 0;
-  map[0] = 0;
-  for (let j = 1; j < endB; j++) {
-    if (b[j] == b[k]) {
-      map[j] = map[k];
-    } else {
-      map[j] = k;
-    }
-    while (k > 0 && b[j] != b[k]) {
-      k = map[k];
-    }
-    if (b[j] == b[k]) {
-      k++;
-    }
-  }
-  k = 0;
-  for (let i = startA; i < a.length; i++) {
-    while (k > 0 && a[i] != b[k]) {
-      k = map[k];
-    }
-    if (a[i] == b[k]) {
-      k++;
-    }
-  }
-  return k;
-}
-function segment(string, segmenter) {
-  const parts = [];
-  for (const segmentObj of Array.from(segmenter.segment(string))) {
-    const segment2 = segmentObj.segment;
-    if (parts.length && /\s/.test(parts[parts.length - 1]) && /\s/.test(segment2)) {
-      parts[parts.length - 1] += segment2;
-    } else {
-      parts.push(segment2);
-    }
-  }
-  return parts;
-}
-function trailingWs(string, segmenter) {
-  if (segmenter) {
-    return leadingAndTrailingWs(string, segmenter)[1];
-  }
-  let i;
-  for (i = string.length - 1; i >= 0; i--) {
-    if (!string[i].match(/\s/)) {
-      break;
-    }
-  }
-  return string.substring(i + 1);
-}
-function leadingWs(string, segmenter) {
-  if (segmenter) {
-    return leadingAndTrailingWs(string, segmenter)[0];
-  }
-  const match3 = string.match(/^\s*/);
-  return match3 ? match3[0] : "";
-}
-function leadingAndTrailingWs(string, segmenter) {
-  if (!segmenter) {
-    return [leadingWs(string), trailingWs(string)];
-  }
-  if (segmenter.resolvedOptions().granularity != "word") {
-    throw new Error('The segmenter passed must have a granularity of "word"');
-  }
-  const segments2 = segment(string, segmenter);
-  const firstSeg = segments2[0];
-  const lastSeg = segments2[segments2.length - 1];
-  const head = /\s/.test(firstSeg) ? firstSeg : "";
-  const tail = /\s/.test(lastSeg) ? lastSeg : "";
-  return [head, tail];
-}
-
-// node_modules/diff/libesm/diff/word.js
-var extendedWordChars = "a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
-var tokenizeIncludingWhitespace = new RegExp(`[${extendedWordChars}]+|\\s+|[^${extendedWordChars}]`, "ug");
-var WordDiff = class extends Diff {
-  equals(left, right, options) {
-    if (options.ignoreCase) {
-      left = left.toLowerCase();
-      right = right.toLowerCase();
-    }
-    return left.trim() === right.trim();
-  }
-  tokenize(value, options = {}) {
-    let parts;
-    if (options.intlSegmenter) {
-      const segmenter = options.intlSegmenter;
-      if (segmenter.resolvedOptions().granularity != "word") {
-        throw new Error('The segmenter passed must have a granularity of "word"');
-      }
-      parts = segment(value, segmenter);
-    } else {
-      parts = value.match(tokenizeIncludingWhitespace) || [];
-    }
-    const tokens = [];
-    let prevPart = null;
-    parts.forEach((part) => {
-      if (/\s/.test(part)) {
-        if (prevPart == null) {
-          tokens.push(part);
-        } else {
-          tokens.push(tokens.pop() + part);
-        }
-      } else if (prevPart != null && /\s/.test(prevPart)) {
-        if (tokens[tokens.length - 1] == prevPart) {
-          tokens.push(tokens.pop() + part);
-        } else {
-          tokens.push(prevPart + part);
-        }
-      } else {
-        tokens.push(part);
-      }
-      prevPart = part;
-    });
-    return tokens;
-  }
-  join(tokens) {
-    return tokens.map((token, i) => {
-      if (i == 0) {
-        return token;
-      } else {
-        return token.replace(/^\s+/, "");
-      }
-    }).join("");
-  }
-  postProcess(changes, options) {
-    if (!changes || options.oneChangePerToken) {
-      return changes;
-    }
-    let lastKeep = null;
-    let insertion = null;
-    let deletion = null;
-    changes.forEach((change) => {
-      if (change.added) {
-        insertion = change;
-      } else if (change.removed) {
-        deletion = change;
-      } else {
-        if (insertion || deletion) {
-          dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change, options.intlSegmenter);
-        }
-        lastKeep = change;
-        insertion = null;
-        deletion = null;
-      }
-    });
-    if (insertion || deletion) {
-      dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null, options.intlSegmenter);
-    }
-    return changes;
-  }
-};
-var wordDiff = new WordDiff();
-function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep, segmenter) {
-  if (deletion && insertion) {
-    const [oldWsPrefix, oldWsSuffix] = leadingAndTrailingWs(deletion.value, segmenter);
-    const [newWsPrefix, newWsSuffix] = leadingAndTrailingWs(insertion.value, segmenter);
-    if (startKeep) {
-      const commonWsPrefix = longestCommonPrefix(oldWsPrefix, newWsPrefix);
-      startKeep.value = replaceSuffix(startKeep.value, newWsPrefix, commonWsPrefix);
-      deletion.value = removePrefix(deletion.value, commonWsPrefix);
-      insertion.value = removePrefix(insertion.value, commonWsPrefix);
-    }
-    if (endKeep) {
-      const commonWsSuffix = longestCommonSuffix(oldWsSuffix, newWsSuffix);
-      endKeep.value = replacePrefix(endKeep.value, newWsSuffix, commonWsSuffix);
-      deletion.value = removeSuffix(deletion.value, commonWsSuffix);
-      insertion.value = removeSuffix(insertion.value, commonWsSuffix);
-    }
-  } else if (insertion) {
-    if (startKeep) {
-      const ws = leadingWs(insertion.value, segmenter);
-      insertion.value = insertion.value.substring(ws.length);
-    }
-    if (endKeep) {
-      const ws = leadingWs(endKeep.value, segmenter);
-      endKeep.value = endKeep.value.substring(ws.length);
-    }
-  } else if (startKeep && endKeep) {
-    const newWsFull = leadingWs(endKeep.value, segmenter), [delWsStart, delWsEnd] = leadingAndTrailingWs(deletion.value, segmenter);
-    const newWsStart = longestCommonPrefix(newWsFull, delWsStart);
-    deletion.value = removePrefix(deletion.value, newWsStart);
-    const newWsEnd = longestCommonSuffix(removePrefix(newWsFull, newWsStart), delWsEnd);
-    deletion.value = removeSuffix(deletion.value, newWsEnd);
-    endKeep.value = replacePrefix(endKeep.value, newWsFull, newWsEnd);
-    startKeep.value = replaceSuffix(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
-  } else if (endKeep) {
-    const endKeepWsPrefix = leadingWs(endKeep.value, segmenter);
-    const deletionWsSuffix = trailingWs(deletion.value, segmenter);
-    const overlap = maximumOverlap(deletionWsSuffix, endKeepWsPrefix);
-    deletion.value = removeSuffix(deletion.value, overlap);
-  } else if (startKeep) {
-    const startKeepWsSuffix = trailingWs(startKeep.value, segmenter);
-    const deletionWsPrefix = leadingWs(deletion.value, segmenter);
-    const overlap = maximumOverlap(startKeepWsSuffix, deletionWsPrefix);
-    deletion.value = removePrefix(deletion.value, overlap);
-  }
-}
-var WordsWithSpaceDiff = class extends Diff {
-  tokenize(value) {
-    const regex = new RegExp(`(\\r?\\n)|[${extendedWordChars}]+|[^\\S\\n\\r]+|[^${extendedWordChars}]`, "ug");
-    return value.match(regex) || [];
-  }
-};
-var wordsWithSpaceDiff = new WordsWithSpaceDiff();
-function diffWordsWithSpace(oldStr, newStr, options) {
-  return wordsWithSpaceDiff.diff(oldStr, newStr, options);
-}
-
-// node_modules/diff/libesm/diff/line.js
-var LineDiff = class extends Diff {
-  constructor() {
-    super(...arguments);
-    this.tokenize = tokenize;
-  }
-  equals(left, right, options) {
-    if (options.ignoreWhitespace) {
-      if (!options.newlineIsToken || !left.includes("\n")) {
-        left = left.trim();
-      }
-      if (!options.newlineIsToken || !right.includes("\n")) {
-        right = right.trim();
-      }
-    } else if (options.ignoreNewlineAtEof && !options.newlineIsToken) {
-      if (left.endsWith("\n")) {
-        left = left.slice(0, -1);
-      }
-      if (right.endsWith("\n")) {
-        right = right.slice(0, -1);
-      }
-    }
-    return super.equals(left, right, options);
-  }
-};
-var lineDiff = new LineDiff();
-function diffLines(oldStr, newStr, options) {
-  return lineDiff.diff(oldStr, newStr, options);
-}
-function tokenize(value, options) {
-  if (options.stripTrailingCr) {
-    value = value.replace(/\r\n/g, "\n");
-  }
-  const retLines = [], linesAndNewlines = value.split(/(\n|\r\n)/);
-  if (!linesAndNewlines[linesAndNewlines.length - 1]) {
-    linesAndNewlines.pop();
-  }
-  for (let i = 0; i < linesAndNewlines.length; i++) {
-    const line = linesAndNewlines[i];
-    if (i % 2 && !options.newlineIsToken) {
-      retLines[retLines.length - 1] += line;
-    } else {
-      retLines.push(line);
-    }
-  }
-  return retLines;
-}
-
-// node_modules/diff/libesm/patch/create.js
-function structuredPatch(oldFileName, newFileName, oldStr, newStr, oldHeader, newHeader, options) {
-  let optionsObj;
-  if (!options) {
-    optionsObj = {};
-  } else if (typeof options === "function") {
-    optionsObj = { callback: options };
-  } else {
-    optionsObj = options;
-  }
-  if (typeof optionsObj.context === "undefined") {
-    optionsObj.context = 4;
-  }
-  const context3 = optionsObj.context;
-  if (optionsObj.newlineIsToken) {
-    throw new Error("newlineIsToken may not be used with patch-generation functions, only with diffing functions");
-  }
-  if (!optionsObj.callback) {
-    return diffLinesResultToPatch(diffLines(oldStr, newStr, optionsObj));
-  } else {
-    const { callback } = optionsObj;
-    diffLines(oldStr, newStr, Object.assign(Object.assign({}, optionsObj), { callback: (diff) => {
-      const patch = diffLinesResultToPatch(diff);
-      callback(patch);
-    } }));
-  }
-  function diffLinesResultToPatch(diff) {
-    if (!diff) {
-      return;
-    }
-    diff.push({ value: "", lines: [] });
-    function contextLines(lines) {
-      return lines.map(function(entry) {
-        return " " + entry;
-      });
-    }
-    const hunks = [];
-    let oldRangeStart = 0, newRangeStart = 0, curRange = [], oldLine = 1, newLine = 1;
-    for (let i = 0; i < diff.length; i++) {
-      const current = diff[i], lines = current.lines || splitLines(current.value);
-      current.lines = lines;
-      if (current.added || current.removed) {
-        if (!oldRangeStart) {
-          const prev = diff[i - 1];
-          oldRangeStart = oldLine;
-          newRangeStart = newLine;
-          if (prev) {
-            curRange = context3 > 0 ? contextLines(prev.lines.slice(-context3)) : [];
-            oldRangeStart -= curRange.length;
-            newRangeStart -= curRange.length;
-          }
-        }
-        for (const line of lines) {
-          curRange.push((current.added ? "+" : "-") + line);
-        }
-        if (current.added) {
-          newLine += lines.length;
-        } else {
-          oldLine += lines.length;
-        }
-      } else {
-        if (oldRangeStart) {
-          if (lines.length <= context3 * 2 && i < diff.length - 2) {
-            for (const line of contextLines(lines)) {
-              curRange.push(line);
-            }
-          } else {
-            const contextSize = Math.min(lines.length, context3);
-            for (const line of contextLines(lines.slice(0, contextSize))) {
-              curRange.push(line);
-            }
-            const hunk = {
-              oldStart: oldRangeStart,
-              oldLines: oldLine - oldRangeStart + contextSize,
-              newStart: newRangeStart,
-              newLines: newLine - newRangeStart + contextSize,
-              lines: curRange
-            };
-            hunks.push(hunk);
-            oldRangeStart = 0;
-            newRangeStart = 0;
-            curRange = [];
-          }
-        }
-        oldLine += lines.length;
-        newLine += lines.length;
-      }
-    }
-    for (const hunk of hunks) {
-      for (let i = 0; i < hunk.lines.length; i++) {
-        if (hunk.lines[i].endsWith("\n")) {
-          hunk.lines[i] = hunk.lines[i].slice(0, -1);
-        } else {
-          hunk.lines.splice(i + 1, 0, "\\ No newline at end of file");
-          i++;
-        }
-      }
-    }
-    return {
-      oldFileName,
-      newFileName,
-      oldHeader,
-      newHeader,
-      hunks
-    };
-  }
-}
-function splitLines(text) {
-  const hasTrailingNl = text.endsWith("\n");
-  const result = text.split("\n").map((line) => line + "\n");
-  if (hasTrailingNl) {
-    result.pop();
-  } else {
-    result.push(result.pop().slice(0, -1));
-  }
-  return result;
-}
+import { promisify } from "node:util";
 
 // src/report.js
 import { existsSync as existsSync4, readFileSync as readFileSync2 } from "node:fs";
 import { join as join5 } from "node:path";
 
 // src/utilities.js
-import { statSync, existsSync as existsSync3, readdirSync } from "node:fs";
+import { existsSync as existsSync3, lstatSync, readdirSync, statSync } from "node:fs";
 import { join as join4, relative as relative2 } from "node:path";
 
 // node_modules/@actions/glob/lib/internal-globber.js
@@ -28842,51 +28212,52 @@ function debugEmptyDirectory(path11, pattern, { core }) {
 function globPatterns(rootPath, patterns = []) {
   return patterns.map((pattern) => String(pattern ?? "").trim()).filter(Boolean).map((pattern) => pattern.startsWith("!") ? `!${join4(rootPath, pattern.slice(1))}` : join4(rootPath, pattern));
 }
+var UNITS = ["KB", "MB", "GB", "TB"];
 function bytesToSize(bytes) {
   if (bytes === 0) return "0";
   if (!bytes) return "-";
-  const sizes = ["bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
-  if (i === 0) {
-    const value = (bytes / 1024).toFixed(2);
-    if (value === "0.00") return "< 0.01 KB";
-    return `${value} ${sizes[1]}`;
+  let value = bytes / 1024;
+  if (bytes < 1024) return value.toFixed(2) === "0.00" ? "< 0.01 KB" : `${value.toFixed(2)} KB`;
+  let unit = 0;
+  while (unit < UNITS.length - 1 && Number(value.toFixed(2)) >= 1024) {
+    value /= 1024;
+    unit++;
   }
-  return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+  return `${value.toFixed(2)} ${UNITS[unit]}`;
 }
-async function addComment({ marker, content, token, core }) {
-  const pullRequest = context2.payload.pull_request;
-  if (!pullRequest) {
-    core?.info?.("Not running on a pull request; skipping the comment.");
-    return;
-  }
-  const octokit = getOctokit(token);
-  const { owner, repo } = context2.repo;
-  const issue_number = pullRequest.number;
-  const comments = await octokit.paginate(octokit.rest.issues.listComments, { owner, repo, issue_number }) ?? [];
-  const existingComment = [...comments].reverse().find((comment) => typeof comment?.body === "string" && comment.body.startsWith(marker));
-  if (existingComment) {
-    return octokit.rest.issues.updateComment({ owner, repo, comment_id: existingComment.id, body: content });
-  }
-  return octokit.rest.issues.createComment({ owner, repo, issue_number, body: content });
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return results;
 }
 async function fetchFilesAndSizes(rootPath, patterns = [], { core, required = true }) {
   if (!rootPath || !existsSync3(rootPath)) {
     if (required) throw new Error(`The provided path does not exist in the workspace: "${rootPath}"`);
     return /* @__PURE__ */ new Map();
   }
-  const globber = await create(globPatterns(rootPath, patterns).join("\n"), { matchDirectories: false });
-  const files = (await globber.glob()).filter((f) => {
-    const stat2 = statSync(f, { throwIfNoEntry: false });
-    return stat2 && stat2.isFile();
+  const globber = await create(globPatterns(rootPath, patterns).join("\n"), { matchDirectories: false, followSymbolicLinks: false });
+  const files = /* @__PURE__ */ new Map();
+  let links = 0;
+  (await globber.glob()).forEach((f) => {
+    const stat2 = lstatSync(f, { throwIfNoEntry: false });
+    if (stat2?.isFile()) files.set(relative2(rootPath, f), stat2.size);
+    else if (stat2?.isSymbolicLink()) links++;
   });
-  if (files.length === 0) {
+  if (links > 0) core.warning(`From ${rootPath}, ignored ${links} symbolic link${links === 1 ? "" : "s"}; only regular files are measured.`);
+  if (files.size === 0) {
     if (required) debugEmptyDirectory(rootPath, patterns, { core });
     core.warning(`From ${rootPath}, no files matched the glob pattern ${patterns.join(", ")}; continuing without a base.`);
     return /* @__PURE__ */ new Map();
   }
-  core.info(`From ${rootPath}, found ${files.length} files matching the glob pattern ${patterns.join(", ")}.`);
-  return new Map(files.map((f) => [relative2(rootPath, f), statSync(f).size]));
+  core.info(`From ${rootPath}, found ${files.size} files matching the glob pattern ${patterns.join(", ")}.`);
+  return files;
 }
 
 // src/report.js
@@ -28965,7 +28336,7 @@ function groupByPackage(headMap, baseMap = /* @__PURE__ */ new Map(), { buildDir
     if (!packages.has(packageDir)) packages.set(packageDir, { name: packageName, packageDir, files: /* @__PURE__ */ new Map() });
     const { files } = packages.get(packageDir);
     if (files.has(readableFilename)) return;
-    files.set(readableFilename, { headByteSize: headMap.get(filepath), baseByteSize: baseMap.get(filepath) });
+    files.set(readableFilename, { path: filepath, headByteSize: headMap.get(filepath), baseByteSize: baseMap.get(filepath) });
   };
   [...headMap.keys(), ...baseMap.keys()].forEach(add);
   return new Map([...packages].sort(([a], [b]) => a.localeCompare(b)));
@@ -29045,7 +28416,20 @@ function buildSections(packages, { hasBase, rootPath = ".", buildDir = DEFAULT_B
   return sections;
 }
 var toTable = (header, rows) => [header, header.map(() => "-"), ...rows].map((row) => `| ${row.join(" | ")} |`);
-function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE__ */ new Map(), hasBase = baseMap.size > 0, rootPath = ".", buildDir = DEFAULT_BUILD_DIR, mainFile = DEFAULT_MAIN_FILE, readPackageJson = true, extensions = [], core } = {}) {
+var FIXED_OVERHEAD = 1500;
+var SUMMARY_SHARE = 0.25;
+function fitRows(rows, budget) {
+  const kept = [];
+  let used = 0;
+  for (const row of rows) {
+    const length = row.join(" | ").length + 6;
+    if (used + length > budget) break;
+    used += length;
+    kept.push(row);
+  }
+  return { kept, used };
+}
+function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE__ */ new Map(), hasBase = baseMap.size > 0, rootPath = ".", buildDir = DEFAULT_BUILD_DIR, mainFile = DEFAULT_MAIN_FILE, readPackageJson = true, extensions = [], maxLength = Infinity, core } = {}) {
   const allowed = normalizeExtensions(extensions);
   const head = filterByExtensions(headMap, allowed);
   const base = hasBase ? filterByExtensions(baseMap, allowed) : /* @__PURE__ */ new Map();
@@ -29055,12 +28439,13 @@ function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE
   const sections = buildSections(groupByPackage(head, base, { buildDir }), { hasBase, rootPath, buildDir, mainFile, readPackageJson, core });
   const summary2 = ["### Summary", `**Total size**: ${bytesToSize(headTotal)}<sup>*</sup>`];
   const markdown = [];
-  const summaryRows = [];
+  const omitted = { files: 0, packages: 0 };
   if (sections.length === 0) {
     summary2.push("", "\u{1F389} No changes detected in any packages");
   } else {
     const tableHead = ["Filename", "Head", "Minified", "Gzipped", ...hasBase ? ["Compared to base"] : []];
-    sections.forEach(({ name, mainFile: packageMain, files }) => {
+    const summaryRows = [];
+    const tables = sections.map(({ name, mainFile: packageMain, files }) => {
       const rows = [];
       [...files.keys()].sort().forEach((readableFilename) => {
         if (!isReportedFile(readableFilename)) return;
@@ -29069,8 +28454,30 @@ function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE
         if (isMainFile) summaryRows.push([name, ...row.slice(1)]);
         rows.push(row);
       });
-      markdown.push("", `#### ${name}`, "", ...toTable(tableHead, rows));
+      return { name, rows };
     });
+    let budget = maxLength - FIXED_OVERHEAD;
+    const summaryHead = ["Package", "Size", "Minified", "Gzipped", ...hasBase ? ["\u0394"] : []];
+    const summaryFit = fitRows(summaryRows, Math.max(0, budget * SUMMARY_SHARE));
+    budget -= summaryFit.used;
+    tables.forEach(({ name, rows }) => {
+      const header = ["", `#### ${name}`, "", ...toTable(tableHead, [])];
+      const headerLength = header.join("\n").length + 1;
+      if (budget < headerLength + 200) {
+        omitted.packages++;
+        omitted.files += rows.length;
+        return;
+      }
+      budget -= headerLength;
+      const { kept, used } = fitRows(rows, budget);
+      budget -= used;
+      markdown.push("", `#### ${name}`, "", ...toTable(tableHead, kept));
+      if (kept.length < rows.length) {
+        omitted.files += rows.length - kept.length;
+        markdown.push("", `<em>\u2026 ${rows.length - kept.length} more ${rows.length - kept.length === 1 ? "file" : "files"} not shown.</em>`);
+      }
+    });
+    if (omitted.packages > 0) markdown.push("", `<em>\u2026 ${omitted.packages} more ${omitted.packages === 1 ? "package" : "packages"} not shown.</em>`);
     if (!hasBase) {
       summary2.push("No base branch to compare against.", "");
     } else if (hasChanged) {
@@ -29083,10 +28490,8 @@ function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE
       markdown.unshift('<a name="details"></a>', "<details>", "<summary><b>File change details</b></summary>", "");
       markdown.push("", "</details>");
     }
-  }
-  if (summaryRows.length > 0) {
-    const summaryHead = ["Package", "Size", "Minified", "Gzipped", ...hasBase ? ["\u0394"] : []];
-    summary2.push(...toTable(summaryHead, summaryRows));
+    if (summaryFit.kept.length > 0) summary2.push(...toTable(summaryHead, summaryFit.kept));
+    if (summaryFit.kept.length < summaryRows.length) summary2.push("", `<em>\u2026 ${summaryRows.length - summaryFit.kept.length} more packages not shown.</em>`);
   }
   markdown.push("", "<small>", "* <em>Size is the sum of all reported files, using the minified size where one exists.</em><br/>", "* <em>An ASCII character in UTF-8 is 8 bits or 1 byte.</em>", "</small>");
   return {
@@ -29097,17 +28502,53 @@ function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE
     baseTotal,
     hasBase,
     hasChanged,
-    sections
+    sections,
+    omitted
   };
 }
 
 // src/changes.js
+var execFileAsync = promisify(execFile);
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "bmp"]);
 var DEFAULT_MAX_DIFF_SIZE = 256 * 1024;
+var DEFAULT_MAX_DIFF_LINES = 2e4;
 var MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-var DIFF_TIMEOUT = 2e3;
+var DIFF_TIMEOUT = 1e4;
+var DIFF_TIME_BUDGET = 6e4;
+var DIFF_CONCURRENCY = 4;
+var SNIFF_BYTES = 8e3;
+var COMPARE_CHUNK = 64 * 1024;
+var MAX_OUTPUT = 32 * 1024 * 1024;
 function isBinary(buffer) {
-  return buffer.subarray(0, 8e3).includes(0);
+  return buffer.subarray(0, SNIFF_BYTES).includes(0);
+}
+function isBinaryFile(path11) {
+  const fd = openSync(path11, "r");
+  try {
+    const buffer = Buffer.alloc(SNIFF_BYTES);
+    const read = readSync(fd, buffer, 0, SNIFF_BYTES, 0);
+    return isBinary(buffer.subarray(0, read));
+  } finally {
+    closeSync(fd);
+  }
+}
+function sameContent(a, b) {
+  const fa = openSync(a, "r");
+  let fb;
+  try {
+    fb = openSync(b, "r");
+    const bufA = Buffer.alloc(COMPARE_CHUNK);
+    const bufB = Buffer.alloc(COMPARE_CHUNK);
+    for (let position = 0; ; position += COMPARE_CHUNK) {
+      const readA = readSync(fa, bufA, 0, COMPARE_CHUNK, position);
+      const readB = readSync(fb, bufB, 0, COMPARE_CHUNK, position);
+      if (readA !== readB || !bufA.subarray(0, readA).equals(bufB.subarray(0, readB))) return false;
+      if (readA === 0) return true;
+    }
+  } finally {
+    closeSync(fa);
+    if (fb !== void 0) closeSync(fb);
+  }
 }
 var isImage = (filepath) => IMAGE_EXTENSIONS.has(baseExtension(filepath));
 function changeStatus(head, base) {
@@ -29116,45 +28557,73 @@ function changeStatus(head, base) {
   if (head == null) return void 0;
   return "modified";
 }
-var read = (path11) => {
-  if (!path11) return void 0;
-  try {
-    return readFileSync3(path11);
-  } catch {
-    return void 0;
-  }
-};
-function lineDiff2(file, oldText, newText) {
-  const patch = structuredPatch(`a/${file}`, `b/${file}`, oldText, newText, "", "", { context: 3, timeout: DIFF_TIMEOUT });
-  if (!patch) return void 0;
+var HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+function parseUnifiedDiff(text) {
+  const hunks = [];
   let additions = 0;
   let deletions = 0;
-  patch.hunks.forEach(
-    ({ lines }) => lines.forEach((line) => {
-      if (line.startsWith("+")) additions++;
-      else if (line.startsWith("-")) deletions++;
-    })
-  );
-  return { hunks: patch.hunks, additions, deletions };
+  let current;
+  for (const line of text.split("\n")) {
+    const header = HUNK_HEADER.exec(line);
+    if (header) {
+      current = { oldStart: Number(header[1]), oldLines: header[2] === void 0 ? 1 : Number(header[2]), newStart: Number(header[3]), newLines: header[4] === void 0 ? 1 : Number(header[4]), lines: [] };
+      hunks.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const sign = line[0];
+    if (sign === "+") additions++;
+    else if (sign === "-") deletions++;
+    else if (sign !== " " && sign !== "\\") continue;
+    current.lines.push(line);
+  }
+  return { hunks, additions, deletions };
 }
-function collectChanges({ headMap, baseMap = /* @__PURE__ */ new Map(), headRoot, baseRoot, extensions = [], maxDiffSize = DEFAULT_MAX_DIFF_SIZE }) {
+var gitEnv = () => ({ ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: devNull, GIT_OPTIONAL_LOCKS: "0" });
+async function hasGit(git = "git") {
+  try {
+    await execFileAsync(git, ["--version"], { timeout: 5e3 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function gitDiff({ basePath, headPath, git = "git", timeout = DIFF_TIMEOUT }) {
+  const args = ["-c", "core.quotepath=off", "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--unified=3", "--", basePath ?? "/dev/null", headPath ?? "/dev/null"];
+  try {
+    const { stdout } = await execFileAsync(git, args, { cwd: tmpdir(), env: gitEnv(), timeout, maxBuffer: MAX_OUTPUT, encoding: "utf8" });
+    return parseUnifiedDiff(stdout);
+  } catch (error2) {
+    if (error2.code === 1 && typeof error2.stdout === "string") return parseUnifiedDiff(error2.stdout);
+    const reason = error2.killed ? "diff timed out" : error2.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "diff output too large" : `git failed (${error2.code ?? error2.message})`;
+    throw Object.assign(new Error(reason), { reason, cause: error2 });
+  }
+}
+async function collectChanges({ headMap, baseMap = /* @__PURE__ */ new Map(), headRoot, baseRoot, extensions = [], maxDiffSize = DEFAULT_MAX_DIFF_SIZE, maxDiffLines = DEFAULT_MAX_DIFF_LINES, git = "git", diffTimeout = DIFF_TIMEOUT, diffTimeBudget = DIFF_TIME_BUDGET, core }) {
   const allowed = normalizeExtensions(extensions);
   const head = filterByExtensions(headMap, allowed);
   const base = filterByExtensions(baseMap, allowed);
   const text = [];
   const images = [];
   const stats = { added: 0, removed: 0, modified: 0, additions: 0, deletions: 0 };
+  const pending = [];
+  const unreadable = [];
   const files = [.../* @__PURE__ */ new Set([...head.keys(), ...base.keys()])].filter(isReportedFile).sort();
   files.forEach((file) => {
     const headByteSize = head.get(file);
     const baseByteSize = base.get(file);
+    const status = changeStatus(headByteSize, baseByteSize);
+    if (!status) return;
     const headPath = headByteSize != null ? join6(headRoot, file) : void 0;
     const basePath = baseByteSize != null && baseRoot ? join6(baseRoot, file) : void 0;
-    const headBuffer = read(headPath);
-    const baseBuffer = read(basePath);
-    const status = changeStatus(headBuffer?.length, baseBuffer?.length);
-    if (!status) return;
-    if (status === "modified" && headBuffer.equals(baseBuffer)) return;
+    let failure;
+    if (status === "modified" && headByteSize === baseByteSize) {
+      try {
+        if (sameContent(headPath, basePath)) return;
+      } catch (error2) {
+        failure = error2;
+      }
+    }
     stats[status]++;
     if (isImage(file)) {
       images.push({ file, status, headByteSize, baseByteSize, headPath, basePath });
@@ -29162,29 +28631,88 @@ function collectChanges({ headMap, baseMap = /* @__PURE__ */ new Map(), headRoot
     }
     const change = { file, status, additions: 0, deletions: 0, hunks: [] };
     text.push(change);
-    if (headBuffer && isBinary(headBuffer) || baseBuffer && isBinary(baseBuffer)) {
-      change.skipped = "binary file";
+    if (!failure) {
+      try {
+        if (headPath && isBinaryFile(headPath) || basePath && isBinaryFile(basePath)) {
+          change.skipped = "binary file";
+          return;
+        }
+      } catch (error2) {
+        failure = error2;
+      }
+    }
+    if (failure) {
+      change.skipped = `unreadable (${failure.code ?? failure.message})`;
+      unreadable.push(file);
       return;
     }
-    if (Math.max(headBuffer?.length ?? 0, baseBuffer?.length ?? 0) > maxDiffSize) {
+    if (Math.max(headByteSize ?? 0, baseByteSize ?? 0) > maxDiffSize) {
       change.skipped = "file exceeds max-diff-size";
       return;
     }
-    const result = lineDiff2(file, baseBuffer?.toString("utf8") ?? "", headBuffer?.toString("utf8") ?? "");
-    if (!result) {
-      change.skipped = "diff too large to compute";
-      return;
-    }
-    Object.assign(change, result);
-    stats.additions += result.additions;
-    stats.deletions += result.deletions;
+    pending.push({ change, headPath, basePath });
   });
+  if (unreadable.length > 0) core?.warning?.(`Could not read ${unreadable.length} file${unreadable.length === 1 ? "" : "s"}; listed without a diff: ${unreadable.slice(0, 5).join(", ")}${unreadable.length > 5 ? ", \u2026" : ""}`);
+  if (pending.length > 0 && !await hasGit(git)) {
+    core?.warning?.("`git` was not found on the PATH, so line diffs are skipped. Install git (it is preinstalled on GitHub-hosted runners) to see them.");
+    pending.forEach(({ change }) => change.skipped = "git is not available on PATH");
+    return { text, images, stats };
+  }
+  const started = Date.now();
+  let retained = 0;
+  for (let i = 0; i < pending.length; i += DIFF_CONCURRENCY * 8) {
+    const batch = pending.slice(i, i + DIFF_CONCURRENCY * 8);
+    const results = await mapLimit(batch, DIFF_CONCURRENCY, async ({ headPath, basePath }) => {
+      if (Date.now() - started > diffTimeBudget) return { reason: "diff time budget exhausted" };
+      try {
+        return await gitDiff({ basePath, headPath, git, timeout: diffTimeout });
+      } catch (error2) {
+        return { reason: error2.reason ?? error2.message };
+      }
+    });
+    results.forEach((result, index) => {
+      const { change } = batch[index];
+      if (result.reason) {
+        change.skipped = result.reason;
+        return;
+      }
+      change.additions = result.additions;
+      change.deletions = result.deletions;
+      stats.additions += result.additions;
+      stats.deletions += result.deletions;
+      const lines = result.hunks.reduce((sum, hunk) => sum + hunk.lines.length + 1, 0);
+      if (retained + lines > maxDiffLines) change.omitted = `the report's diff budget (${maxDiffLines.toLocaleString("en-US")} lines) is used up`;
+      else {
+        retained += lines;
+        change.hunks = result.hunks;
+      }
+    });
+  }
   return { text, images, stats };
+}
+
+// src/comment.js
+var COMMENT_LIMIT = 65536;
+function isStickyComment(comment, marker) {
+  return comment?.user?.type === "Bot" && typeof comment.body === "string" && comment.body.startsWith(marker);
+}
+async function upsertComment({ octokit, owner, repo, issueNumber, marker, content }) {
+  const pages = octokit.paginate.iterator(octokit.rest.issues.listComments, { owner, repo, issue_number: issueNumber, per_page: 100 });
+  for await (const { data: data2 } of pages) {
+    const existing = data2.find((comment) => isStickyComment(comment, marker));
+    if (existing) {
+      await octokit.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: content });
+      return { action: "updated", id: existing.id };
+    }
+  }
+  const { data } = await octokit.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: content });
+  return { action: "created", id: data?.id };
 }
 
 // src/publish.js
 var DEFAULT_REPORT_BRANCH = "file-diff-reports";
-var MAX_ATTEMPTS = 3;
+var MAX_ATTEMPTS = 4;
+var UPLOAD_CONCURRENCY = 6;
 function reportDir({ pullNumber, sha = "" }) {
   return pullNumber ? `pr-${pullNumber}` : `sha-${sha.slice(0, 12) || "unknown"}`;
 }
@@ -29200,54 +28728,577 @@ async function reportUrl({ octokit, owner, repo, dir, pagesUrl }) {
   return `${String(base).replace(/\/+$/, "")}/${dir}/`;
 }
 var isStatus = (error2, status) => error2?.status === status;
-async function publishToBranch({ octokit, owner, repo, branch, dir, files, message }) {
+var defaultDelay = (attempt) => new Promise((resolve2) => setTimeout(resolve2, 200 * attempt + Math.random() * 300));
+async function branchHead({ git, owner, repo, branch }) {
+  try {
+    return (await git.getRef({ owner, repo, ref: `heads/${branch}` })).data.object.sha;
+  } catch (error2) {
+    if (isStatus(error2, 404)) return void 0;
+    throw error2;
+  }
+}
+async function staleEntries({ git, owner, repo, baseTree, dir, keep }) {
+  const root = (await git.getTree({ owner, repo, tree_sha: baseTree })).data;
+  if (root.truncated) throw new Error("The report branch has too many top-level entries to list.");
+  const entry = root.tree.find(({ path: path11, type }) => path11 === dir && type === "tree");
+  if (!entry) return [];
+  const listing = (await git.getTree({ owner, repo, tree_sha: entry.sha, recursive: "true" })).data;
+  if (listing.truncated) throw new Error(`${dir}/ has too many files to list on the report branch.`);
+  return listing.tree.filter(({ type }) => type === "blob").map(({ path: path11 }) => `${dir}/${path11}`).filter((path11) => !keep.has(path11)).map((path11) => ({ path: path11, mode: "100644", type: "blob", sha: null }));
+}
+async function publishToBranch({ octokit, owner, repo, branch, dir, files, message, delay = defaultDelay }) {
   const { git } = octokit.rest;
-  const blobs = await Promise.all(
-    files.map(async ({ path: path11, content }) => {
-      const { data } = await git.createBlob({ owner, repo, content: Buffer.from(content).toString("base64"), encoding: "base64" });
-      return { path: `${dir}/${path11}`, mode: "100644", type: "blob", sha: data.sha };
-    })
-  );
+  const target = { git, owner, repo, branch };
+  const blobs = await mapLimit(files, UPLOAD_CONCURRENCY, async ({ path: path11, content }) => {
+    const { data } = await git.createBlob({ owner, repo, content: Buffer.from(content).toString("base64"), encoding: "base64" });
+    return { path: `${dir}/${path11}`, mode: "100644", type: "blob", sha: data.sha };
+  });
+  const keep = new Set(blobs.map(({ path: path11 }) => path11));
   for (let attempt = 1; ; attempt++) {
-    let parent;
-    try {
-      parent = (await git.getRef({ owner, repo, ref: `heads/${branch}` })).data.object.sha;
-    } catch (error2) {
-      if (!isStatus(error2, 404)) throw error2;
-    }
-    if (!parent) {
+    const parent = await branchHead(target);
+    let tree;
+    if (parent) {
+      const baseTree = (await git.getCommit({ owner, repo, commit_sha: parent })).data.tree.sha;
+      const entries = [...blobs, ...await staleEntries({ git, owner, repo, baseTree, dir, keep })];
+      if (entries.length === 0) return void 0;
+      tree = (await git.createTree({ owner, repo, base_tree: baseTree, tree: entries })).data.sha;
+      if (tree === baseTree) return void 0;
+    } else {
       if (blobs.length === 0) return void 0;
       const nojekyll = (await git.createBlob({ owner, repo, content: "", encoding: "utf-8" })).data.sha;
-      const tree2 = (await git.createTree({ owner, repo, tree: [...blobs, { path: ".nojekyll", mode: "100644", type: "blob", sha: nojekyll }] })).data.sha;
-      const commit2 = (await git.createCommit({ owner, repo, message, tree: tree2, parents: [] })).data.sha;
+      tree = (await git.createTree({ owner, repo, tree: [...blobs, { path: ".nojekyll", mode: "100644", type: "blob", sha: nojekyll }] })).data.sha;
+    }
+    const commit = (await git.createCommit({ owner, repo, message, tree, parents: [] })).data.sha;
+    const moved = await branchHead(target) !== parent;
+    if (!moved) {
       try {
-        await git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: commit2 });
-        return commit2;
+        if (parent) await git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit, force: true });
+        else await git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: commit });
+        return commit;
       } catch (error2) {
-        if (!isStatus(error2, 422) || attempt >= MAX_ATTEMPTS) throw error2;
-        continue;
+        if (!isStatus(error2, 422)) throw error2;
       }
     }
-    const baseTree = (await git.getCommit({ owner, repo, commit_sha: parent })).data.tree.sha;
-    const existing = (await git.getTree({ owner, repo, tree_sha: baseTree, recursive: "true" })).data.tree;
-    const keep = new Set(blobs.map(({ path: path11 }) => path11));
-    const stale = existing.filter(({ path: path11, type }) => type === "blob" && path11.startsWith(`${dir}/`) && !keep.has(path11)).map(({ path: path11 }) => ({ path: path11, mode: "100644", type: "blob", sha: null }));
-    const entries = [...blobs, ...stale];
-    if (entries.length === 0) return void 0;
-    const tree = (await git.createTree({ owner, repo, base_tree: baseTree, tree: entries })).data.sha;
-    if (tree === baseTree) return void 0;
-    const commit = (await git.createCommit({ owner, repo, message, tree, parents: [parent] })).data.sha;
-    try {
-      await git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit, force: false });
-      return commit;
-    } catch (error2) {
-      if (!isStatus(error2, 422) || attempt >= MAX_ATTEMPTS) throw error2;
-    }
+    if (attempt >= MAX_ATTEMPTS) throw new Error(`The report branch "${branch}" kept changing underneath this run; gave up after ${MAX_ATTEMPTS} attempts.`);
+    await delay(attempt);
   }
 }
 
+// src/inputs.js
+var VISUAL_DIFF_MODES = ["summary", "branch", "none"];
+var BRANCH_NAME = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+function readInputs(core) {
+  const text = (name, fallback = "") => core.getInput(name).trim() || fallback;
+  const flag = (name, fallback) => core.getInput(name) ? core.getBooleanInput(name) : fallback;
+  const count = (name, fallback) => {
+    const raw = text(name);
+    if (!raw) return fallback;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${name} "${raw}"; expected a whole number of 0 or more.`);
+    return value;
+  };
+  const visualDiff = text("visual-diff", "summary").toLowerCase();
+  if (!VISUAL_DIFF_MODES.includes(visualDiff)) throw new Error(`Invalid visual-diff "${visualDiff}"; expected one of: ${VISUAL_DIFF_MODES.join(", ")}.`);
+  const reportBranch = text("report-branch", DEFAULT_REPORT_BRANCH);
+  if (!BRANCH_NAME.test(reportBranch) || reportBranch.includes("..") || reportBranch.endsWith(".lock") || reportBranch.endsWith(".")) throw new Error(`Invalid report-branch "${reportBranch}"; use letters, digits, ".", "_", "-" and "/" in a valid git branch name.`);
+  const pagesUrl = text("pages-url");
+  if (pagesUrl) {
+    let url;
+    try {
+      url = new URL(pagesUrl);
+    } catch {
+      throw new Error(`Invalid pages-url "${pagesUrl}"; expected an http(s) URL.`);
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`Invalid pages-url "${pagesUrl}"; expected an http(s) URL.`);
+  }
+  return {
+    token: core.getInput("token"),
+    headPath: core.getInput("head-path"),
+    basePath: core.getInput("base-path"),
+    fileGlobPattern: core.getMultilineInput("file-glob-pattern", { trimWhitespace: true }),
+    comment: flag("comment", true),
+    commentHeader: text("comment-header", "## File metrics"),
+    buildDir: text("build-dir", DEFAULT_BUILD_DIR),
+    mainFile: text("main-file", DEFAULT_MAIN_FILE),
+    readPackageJson: flag("read-package-json", true),
+    extensions: core.getMultilineInput("extensions", { trimWhitespace: true }),
+    visualDiff,
+    reportBranch,
+    pagesUrl,
+    maxDiffSize: count("max-diff-size", DEFAULT_MAX_DIFF_SIZE),
+    maxDiffLines: count("max-diff-lines", DEFAULT_MAX_DIFF_LINES)
+  };
+}
+
 // src/page.js
-import { readFileSync as readFileSync4 } from "node:fs";
+import { readFileSync as readFileSync3 } from "node:fs";
+
+// node_modules/diff/libesm/diff/base.js
+var Diff = class {
+  diff(oldStr, newStr, options = {}) {
+    let callback;
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    } else if ("callback" in options) {
+      callback = options.callback;
+    }
+    const oldString = this.castInput(oldStr, options);
+    const newString = this.castInput(newStr, options);
+    const oldTokens = this.removeEmpty(this.tokenize(oldString, options));
+    const newTokens = this.removeEmpty(this.tokenize(newString, options));
+    return this.diffWithOptionsObj(oldTokens, newTokens, options, callback);
+  }
+  diffWithOptionsObj(oldTokens, newTokens, options, callback) {
+    var _a2;
+    const done = (value) => {
+      value = this.postProcess(value, options);
+      if (callback) {
+        setTimeout(function() {
+          callback(value);
+        }, 0);
+        return void 0;
+      } else {
+        return value;
+      }
+    };
+    const newLen = newTokens.length, oldLen = oldTokens.length;
+    let editLength = 1;
+    let maxEditLength = newLen + oldLen;
+    if (options.maxEditLength != null) {
+      maxEditLength = Math.min(maxEditLength, options.maxEditLength);
+    }
+    const maxExecutionTime = (_a2 = options.timeout) !== null && _a2 !== void 0 ? _a2 : Infinity;
+    const abortAfterTimestamp = Date.now() + maxExecutionTime;
+    const bestPath = [{ oldPos: -1, lastComponent: void 0 }];
+    let newPos = this.extractCommon(bestPath[0], newTokens, oldTokens, 0, options);
+    if (bestPath[0].oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+      return done(this.buildValues(bestPath[0].lastComponent, newTokens, oldTokens));
+    }
+    let minDiagonalToConsider = -Infinity, maxDiagonalToConsider = Infinity;
+    const execEditLength = () => {
+      for (let diagonalPath = Math.max(minDiagonalToConsider, -editLength); diagonalPath <= Math.min(maxDiagonalToConsider, editLength); diagonalPath += 2) {
+        let basePath;
+        const removePath = bestPath[diagonalPath - 1], addPath2 = bestPath[diagonalPath + 1];
+        if (removePath) {
+          bestPath[diagonalPath - 1] = void 0;
+        }
+        let canAdd = false;
+        if (addPath2) {
+          const addPathNewPos = addPath2.oldPos - diagonalPath;
+          canAdd = addPath2 && 0 <= addPathNewPos && addPathNewPos < newLen;
+        }
+        const canRemove = removePath && removePath.oldPos + 1 < oldLen;
+        if (!canAdd && !canRemove) {
+          bestPath[diagonalPath] = void 0;
+          continue;
+        }
+        if (!canRemove || canAdd && removePath.oldPos < addPath2.oldPos) {
+          basePath = this.addToPath(addPath2, true, false, 0, options);
+        } else {
+          basePath = this.addToPath(removePath, false, true, 1, options);
+        }
+        newPos = this.extractCommon(basePath, newTokens, oldTokens, diagonalPath, options);
+        if (basePath.oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+          return done(this.buildValues(basePath.lastComponent, newTokens, oldTokens)) || true;
+        } else {
+          bestPath[diagonalPath] = basePath;
+          if (basePath.oldPos + 1 >= oldLen) {
+            maxDiagonalToConsider = Math.min(maxDiagonalToConsider, diagonalPath - 1);
+          }
+          if (newPos + 1 >= newLen) {
+            minDiagonalToConsider = Math.max(minDiagonalToConsider, diagonalPath + 1);
+          }
+        }
+      }
+      editLength++;
+    };
+    if (callback) {
+      (function exec2() {
+        setTimeout(function() {
+          if (editLength > maxEditLength || Date.now() > abortAfterTimestamp) {
+            return callback(void 0);
+          }
+          if (!execEditLength()) {
+            exec2();
+          }
+        }, 0);
+      })();
+    } else {
+      while (editLength <= maxEditLength && Date.now() <= abortAfterTimestamp) {
+        const ret = execEditLength();
+        if (ret) {
+          return ret;
+        }
+      }
+    }
+  }
+  addToPath(path11, added, removed, oldPosInc, options) {
+    const last = path11.lastComponent;
+    if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
+      return {
+        oldPos: path11.oldPos + oldPosInc,
+        lastComponent: { count: last.count + 1, added, removed, previousComponent: last.previousComponent }
+      };
+    } else {
+      return {
+        oldPos: path11.oldPos + oldPosInc,
+        lastComponent: { count: 1, added, removed, previousComponent: last }
+      };
+    }
+  }
+  extractCommon(basePath, newTokens, oldTokens, diagonalPath, options) {
+    const newLen = newTokens.length, oldLen = oldTokens.length;
+    let oldPos = basePath.oldPos, newPos = oldPos - diagonalPath, commonCount = 0;
+    while (newPos + 1 < newLen && oldPos + 1 < oldLen && this.equals(oldTokens[oldPos + 1], newTokens[newPos + 1], options)) {
+      newPos++;
+      oldPos++;
+      commonCount++;
+      if (options.oneChangePerToken) {
+        basePath.lastComponent = { count: 1, previousComponent: basePath.lastComponent, added: false, removed: false };
+      }
+    }
+    if (commonCount && !options.oneChangePerToken) {
+      basePath.lastComponent = { count: commonCount, previousComponent: basePath.lastComponent, added: false, removed: false };
+    }
+    basePath.oldPos = oldPos;
+    return newPos;
+  }
+  equals(left, right, options) {
+    if (options.comparator) {
+      return options.comparator(left, right);
+    } else {
+      return left === right || !!options.ignoreCase && left.toLowerCase() === right.toLowerCase();
+    }
+  }
+  removeEmpty(array) {
+    const ret = [];
+    for (let i = 0; i < array.length; i++) {
+      if (array[i]) {
+        ret.push(array[i]);
+      }
+    }
+    return ret;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  castInput(value, options) {
+    return value;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tokenize(value, options) {
+    return Array.from(value);
+  }
+  join(chars) {
+    return chars.join("");
+  }
+  postProcess(changeObjects, options) {
+    return changeObjects;
+  }
+  get useLongestToken() {
+    return false;
+  }
+  buildValues(lastComponent, newTokens, oldTokens) {
+    const components = [];
+    let nextComponent;
+    while (lastComponent) {
+      components.push(lastComponent);
+      nextComponent = lastComponent.previousComponent;
+      delete lastComponent.previousComponent;
+      lastComponent = nextComponent;
+    }
+    components.reverse();
+    const componentLen = components.length;
+    let componentPos = 0, newPos = 0, oldPos = 0;
+    for (; componentPos < componentLen; componentPos++) {
+      const component = components[componentPos];
+      if (!component.removed) {
+        if (!component.added && this.useLongestToken) {
+          let value = newTokens.slice(newPos, newPos + component.count);
+          value = value.map(function(value2, i) {
+            const oldValue = oldTokens[oldPos + i];
+            return oldValue.length > value2.length ? oldValue : value2;
+          });
+          component.value = this.join(value);
+        } else {
+          component.value = this.join(newTokens.slice(newPos, newPos + component.count));
+        }
+        newPos += component.count;
+        if (!component.added) {
+          oldPos += component.count;
+        }
+      } else {
+        component.value = this.join(oldTokens.slice(oldPos, oldPos + component.count));
+        oldPos += component.count;
+      }
+    }
+    return components;
+  }
+};
+
+// node_modules/diff/libesm/util/string.js
+function longestCommonPrefix(str1, str2) {
+  let i;
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[i] != str2[i]) {
+      return str1.slice(0, i);
+    }
+  }
+  return str1.slice(0, i);
+}
+function longestCommonSuffix(str1, str2) {
+  let i;
+  if (!str1 || !str2 || str1[str1.length - 1] != str2[str2.length - 1]) {
+    return "";
+  }
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[str1.length - (i + 1)] != str2[str2.length - (i + 1)]) {
+      return str1.slice(-i);
+    }
+  }
+  return str1.slice(-i);
+}
+function replacePrefix(string, oldPrefix, newPrefix) {
+  if (string.slice(0, oldPrefix.length) != oldPrefix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't start with prefix ${JSON.stringify(oldPrefix)}; this is a bug`);
+  }
+  return newPrefix + string.slice(oldPrefix.length);
+}
+function replaceSuffix(string, oldSuffix, newSuffix) {
+  if (!oldSuffix) {
+    return string + newSuffix;
+  }
+  if (string.slice(-oldSuffix.length) != oldSuffix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't end with suffix ${JSON.stringify(oldSuffix)}; this is a bug`);
+  }
+  return string.slice(0, -oldSuffix.length) + newSuffix;
+}
+function removePrefix(string, oldPrefix) {
+  return replacePrefix(string, oldPrefix, "");
+}
+function removeSuffix(string, oldSuffix) {
+  return replaceSuffix(string, oldSuffix, "");
+}
+function maximumOverlap(string1, string2) {
+  return string2.slice(0, overlapCount(string1, string2));
+}
+function overlapCount(a, b) {
+  let startA = 0;
+  if (a.length > b.length) {
+    startA = a.length - b.length;
+  }
+  let endB = b.length;
+  if (a.length < b.length) {
+    endB = a.length;
+  }
+  const map = Array(endB);
+  let k = 0;
+  map[0] = 0;
+  for (let j = 1; j < endB; j++) {
+    if (b[j] == b[k]) {
+      map[j] = map[k];
+    } else {
+      map[j] = k;
+    }
+    while (k > 0 && b[j] != b[k]) {
+      k = map[k];
+    }
+    if (b[j] == b[k]) {
+      k++;
+    }
+  }
+  k = 0;
+  for (let i = startA; i < a.length; i++) {
+    while (k > 0 && a[i] != b[k]) {
+      k = map[k];
+    }
+    if (a[i] == b[k]) {
+      k++;
+    }
+  }
+  return k;
+}
+function segment(string, segmenter) {
+  const parts = [];
+  for (const segmentObj of Array.from(segmenter.segment(string))) {
+    const segment2 = segmentObj.segment;
+    if (parts.length && /\s/.test(parts[parts.length - 1]) && /\s/.test(segment2)) {
+      parts[parts.length - 1] += segment2;
+    } else {
+      parts.push(segment2);
+    }
+  }
+  return parts;
+}
+function trailingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[1];
+  }
+  let i;
+  for (i = string.length - 1; i >= 0; i--) {
+    if (!string[i].match(/\s/)) {
+      break;
+    }
+  }
+  return string.substring(i + 1);
+}
+function leadingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[0];
+  }
+  const match3 = string.match(/^\s*/);
+  return match3 ? match3[0] : "";
+}
+function leadingAndTrailingWs(string, segmenter) {
+  if (!segmenter) {
+    return [leadingWs(string), trailingWs(string)];
+  }
+  if (segmenter.resolvedOptions().granularity != "word") {
+    throw new Error('The segmenter passed must have a granularity of "word"');
+  }
+  const segments2 = segment(string, segmenter);
+  const firstSeg = segments2[0];
+  const lastSeg = segments2[segments2.length - 1];
+  const head = /\s/.test(firstSeg) ? firstSeg : "";
+  const tail = /\s/.test(lastSeg) ? lastSeg : "";
+  return [head, tail];
+}
+
+// node_modules/diff/libesm/diff/word.js
+var extendedWordChars = "a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
+var tokenizeIncludingWhitespace = new RegExp(`[${extendedWordChars}]+|\\s+|[^${extendedWordChars}]`, "ug");
+var WordDiff = class extends Diff {
+  equals(left, right, options) {
+    if (options.ignoreCase) {
+      left = left.toLowerCase();
+      right = right.toLowerCase();
+    }
+    return left.trim() === right.trim();
+  }
+  tokenize(value, options = {}) {
+    let parts;
+    if (options.intlSegmenter) {
+      const segmenter = options.intlSegmenter;
+      if (segmenter.resolvedOptions().granularity != "word") {
+        throw new Error('The segmenter passed must have a granularity of "word"');
+      }
+      parts = segment(value, segmenter);
+    } else {
+      parts = value.match(tokenizeIncludingWhitespace) || [];
+    }
+    const tokens = [];
+    let prevPart = null;
+    parts.forEach((part) => {
+      if (/\s/.test(part)) {
+        if (prevPart == null) {
+          tokens.push(part);
+        } else {
+          tokens.push(tokens.pop() + part);
+        }
+      } else if (prevPart != null && /\s/.test(prevPart)) {
+        if (tokens[tokens.length - 1] == prevPart) {
+          tokens.push(tokens.pop() + part);
+        } else {
+          tokens.push(prevPart + part);
+        }
+      } else {
+        tokens.push(part);
+      }
+      prevPart = part;
+    });
+    return tokens;
+  }
+  join(tokens) {
+    return tokens.map((token, i) => {
+      if (i == 0) {
+        return token;
+      } else {
+        return token.replace(/^\s+/, "");
+      }
+    }).join("");
+  }
+  postProcess(changes, options) {
+    if (!changes || options.oneChangePerToken) {
+      return changes;
+    }
+    let lastKeep = null;
+    let insertion = null;
+    let deletion = null;
+    changes.forEach((change) => {
+      if (change.added) {
+        insertion = change;
+      } else if (change.removed) {
+        deletion = change;
+      } else {
+        if (insertion || deletion) {
+          dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change, options.intlSegmenter);
+        }
+        lastKeep = change;
+        insertion = null;
+        deletion = null;
+      }
+    });
+    if (insertion || deletion) {
+      dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null, options.intlSegmenter);
+    }
+    return changes;
+  }
+};
+var wordDiff = new WordDiff();
+function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep, segmenter) {
+  if (deletion && insertion) {
+    const [oldWsPrefix, oldWsSuffix] = leadingAndTrailingWs(deletion.value, segmenter);
+    const [newWsPrefix, newWsSuffix] = leadingAndTrailingWs(insertion.value, segmenter);
+    if (startKeep) {
+      const commonWsPrefix = longestCommonPrefix(oldWsPrefix, newWsPrefix);
+      startKeep.value = replaceSuffix(startKeep.value, newWsPrefix, commonWsPrefix);
+      deletion.value = removePrefix(deletion.value, commonWsPrefix);
+      insertion.value = removePrefix(insertion.value, commonWsPrefix);
+    }
+    if (endKeep) {
+      const commonWsSuffix = longestCommonSuffix(oldWsSuffix, newWsSuffix);
+      endKeep.value = replacePrefix(endKeep.value, newWsSuffix, commonWsSuffix);
+      deletion.value = removeSuffix(deletion.value, commonWsSuffix);
+      insertion.value = removeSuffix(insertion.value, commonWsSuffix);
+    }
+  } else if (insertion) {
+    if (startKeep) {
+      const ws = leadingWs(insertion.value, segmenter);
+      insertion.value = insertion.value.substring(ws.length);
+    }
+    if (endKeep) {
+      const ws = leadingWs(endKeep.value, segmenter);
+      endKeep.value = endKeep.value.substring(ws.length);
+    }
+  } else if (startKeep && endKeep) {
+    const newWsFull = leadingWs(endKeep.value, segmenter), [delWsStart, delWsEnd] = leadingAndTrailingWs(deletion.value, segmenter);
+    const newWsStart = longestCommonPrefix(newWsFull, delWsStart);
+    deletion.value = removePrefix(deletion.value, newWsStart);
+    const newWsEnd = longestCommonSuffix(removePrefix(newWsFull, newWsStart), delWsEnd);
+    deletion.value = removeSuffix(deletion.value, newWsEnd);
+    endKeep.value = replacePrefix(endKeep.value, newWsFull, newWsEnd);
+    startKeep.value = replaceSuffix(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
+  } else if (endKeep) {
+    const endKeepWsPrefix = leadingWs(endKeep.value, segmenter);
+    const deletionWsSuffix = trailingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(deletionWsSuffix, endKeepWsPrefix);
+    deletion.value = removeSuffix(deletion.value, overlap);
+  } else if (startKeep) {
+    const startKeepWsSuffix = trailingWs(startKeep.value, segmenter);
+    const deletionWsPrefix = leadingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(startKeepWsSuffix, deletionWsPrefix);
+    deletion.value = removePrefix(deletion.value, overlap);
+  }
+}
+var WordsWithSpaceDiff = class extends Diff {
+  tokenize(value) {
+    const regex = new RegExp(`(\\r?\\n)|[${extendedWordChars}]+|[^\\S\\n\\r]+|[^${extendedWordChars}]`, "ug");
+    return value.match(regex) || [];
+  }
+};
+var wordsWithSpaceDiff = new WordsWithSpaceDiff();
+function diffWordsWithSpace(oldStr, newStr, options) {
+  return wordsWithSpaceDiff.diff(oldStr, newStr, options);
+}
 
 // src/render.js
 var SUMMARY_BUDGET = 900 * 1024;
@@ -29312,6 +29363,10 @@ function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY_BUDGET
     const heading = `#### \`${change.file}\` \u2014 ${STATUS_LABEL[change.status]}${counts}`;
     if (change.skipped) {
       out.push(heading, "", `_Line diff skipped: ${change.skipped}._`, "");
+      return;
+    }
+    if (change.omitted) {
+      out.push(heading, "", `_Diff left out because ${change.omitted}. Raise \`max-diff-lines\` to include it._`, "");
       return;
     }
     const diff = unifiedDiff(change);
@@ -29964,6 +30019,9 @@ button.ghost {
 	background: var(--surface);
 	box-shadow: var(--shadow);
 	scroll-margin-block-start: calc(var(--topbar) + 12px);
+	/* Skip layout and paint for files scrolled out of view; the size is remembered once they render. */
+	content-visibility: auto;
+	contain-intrinsic-size: auto none auto 150px;
 }
 
 .file summary {
@@ -30100,11 +30158,6 @@ button.ghost {
 
 .diff.split td.code + td.ln {
 	border-inline-start: 1px solid var(--line);
-}
-
-.code-main[data-view="unified"] .diff.split,
-.code-main[data-view="split"] .diff.unified {
-	display: none;
 }
 
 /* ---- Visual viewer ----------------------------------------------------- */
@@ -30447,7 +30500,7 @@ input[type="range"]:focus-visible {
 `;
 
 // src/report-page.client.js
-var report_page_client_default = '/* Browser script for the visual diff page (inlined by page.js). */\n(() => {\n	const $ = (sel, root = document) => root.querySelector(sel);\n	const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];\n	const store = {\n		get(key) {\n			try {\n				return localStorage.getItem(`file-diff:${key}`);\n			} catch {\n				return null;\n			}\n		},\n		set(key, value) {\n			try {\n				localStorage.setItem(`file-diff:${key}`, value);\n			} catch {\n				// Storage blocked; the choice still applies to this view.\n			}\n		},\n	};\n\n	/* ---- Tabs: selection follows focus, roving tabindex ------------------ */\n	const tablist = $(\'[role="tablist"]\');\n	const tabs = $$(\'[role="tab"]\', tablist);\n	const panelFor = (tab) => document.getElementById(tab.id.replace(/^tab-/, "panel-"));\n\n	function selectTab(tab, { focus = false, push = true } = {}) {\n		tabs.forEach((t) => {\n			const on = t === tab;\n			t.setAttribute("aria-selected", String(on));\n			t.tabIndex = on ? 0 : -1;\n			const panel = panelFor(t);\n			if (on) panel.removeAttribute("hidden");\n			else panel.setAttribute("hidden", "until-found");\n		});\n		if (focus) tab.focus();\n		tab.scrollIntoView({ block: "nearest", inline: "nearest" });\n		if (push) history.replaceState(null, "", `#${tab.id.slice(4)}`);\n	}\n\n	tablist.addEventListener("click", (e) => {\n		const tab = e.target.closest(\'[role="tab"]\');\n		if (tab) selectTab(tab);\n	});\n	tablist.addEventListener("keydown", (e) => {\n		const i = tabs.indexOf(document.activeElement);\n		const rtl = getComputedStyle(tablist).direction === "rtl";\n		const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];\n		let next;\n		if (step) next = tabs[(i + step + tabs.length) % tabs.length];\n		else if (e.key === "Home") next = tabs[0];\n		else if (e.key === "End") next = tabs.at(-1);\n		if (!next || i < 0) return;\n		e.preventDefault();\n		selectTab(next, { focus: true });\n	});\n	// Find-in-page revealed a hidden panel: select its tab.\n	$$(\'[role="tabpanel"]\').forEach((panel) =>\n		panel.addEventListener("beforematch", () => {\n			const tab = document.getElementById(panel.getAttribute("aria-labelledby"));\n			if (tab) selectTab(tab, { push: false });\n		}),\n	);\n\n	/** Shows the tab holding an element, then scrolls to it. */\n	function reveal(el) {\n		const panel = el.closest(\'[role="tabpanel"]\');\n		const tab = panel && document.getElementById(panel.getAttribute("aria-labelledby"));\n		if (tab && tab.getAttribute("aria-selected") !== "true") selectTab(tab, { push: false });\n		const details = el.querySelector("details");\n		if (details) details.open = true;\n		el.scrollIntoView({ block: "start" });\n	}\n\n	document.addEventListener("click", (e) => {\n		const link = e.target.closest(\'a[href^="#f-"]\');\n		if (!link) return;\n		const target = document.getElementById(link.hash.slice(1));\n		if (!target) return;\n		e.preventDefault();\n		reveal(target);\n		history.replaceState(null, "", link.hash);\n	});\n\n	const initial = location.hash.slice(1);\n	const initialTab = document.getElementById(`tab-${initial}`);\n	if (initialTab) selectTab(initialTab, { push: false });\n	else if (initial && document.getElementById(initial)) reveal(document.getElementById(initial));\n\n	/* ---- Toolbars: one tab stop, arrow keys move (focusgroup fallback) --- */\n	$$(\'[role="toolbar"]\').forEach((bar) => {\n		if ("focusGroup" in HTMLElement.prototype) return bar.setAttribute("focusgroup", "toolbar wrap");\n		const items = () => $$("button", bar);\n		items().forEach((b, i) => (b.tabIndex = i ? -1 : 0));\n		bar.addEventListener("focusin", ({ target }) => {\n			if (items().includes(target)) items().forEach((b) => (b.tabIndex = b === target ? 0 : -1));\n		});\n		bar.addEventListener("keydown", (e) => {\n			const list = items();\n			const i = list.indexOf(document.activeElement);\n			if (i < 0) return;\n			const rtl = getComputedStyle(bar).direction === "rtl";\n			const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];\n			let next;\n			if (step) next = list[(i + step + list.length) % list.length];\n			else if (e.key === "Home") next = list[0];\n			else if (e.key === "End") next = list.at(-1);\n			if (!next) return;\n			e.preventDefault();\n			next.focus();\n		});\n	});\n\n	/** Presses one button in a segmented group. */\n	function press(group, button) {\n		$$("button", group).forEach((b) => b.setAttribute("aria-pressed", String(b === button)));\n	}\n\n	/* ---- Code: unified/split and collapse -------------------------------- */\n	const code = $(".code-main");\n	if (code) {\n		const setView = (view) => {\n			code.dataset.view = view;\n			press($(\'[aria-label="Diff layout"]\', code), $(`button[data-view="${view}"]`, code));\n		};\n		setView(store.get("view") === "split" ? "split" : "unified");\n		$(\'[aria-label="Diff layout"]\', code).addEventListener("click", (e) => {\n			const b = e.target.closest("button[data-view]");\n			if (!b) return;\n			setView(b.dataset.view);\n			store.set("view", b.dataset.view);\n		});\n		const collapse = $(\'[data-action="collapse"]\', code);\n		collapse.addEventListener("click", () => {\n			const open = collapse.textContent.startsWith("Expand");\n			$$(".file details", code).forEach((d) => (d.open = open));\n			collapse.textContent = open ? "Collapse all" : "Expand all";\n		});\n	}\n\n	/* ---- Visual: modes, sliders, swipe drag, zoom, pager ----------------- */\n	const viewer = $(".viewer");\n	if (viewer) {\n		const items = $$(".image-item", viewer);\n		const listButtons = $$(".filelist button", viewer.parentElement);\n		const modes = $(".modes", viewer);\n		let index = 0;\n\n		const current = () => items[index];\n\n		const FIT_HEIGHT = 420;\n\n		/** Sizes both versions by one scale so stacked modes stay aligned. Fit fills the stage. */\n		function applyZoom() {\n			const item = current();\n			const imgs = $$("img", item);\n			if (!imgs.every((img) => img.complete && img.naturalWidth)) {\n				imgs.forEach((img) => img.addEventListener("load", applyZoom, { once: true }));\n				return;\n			}\n			const zoom = viewer.dataset.zoom;\n			let scale = Number(zoom);\n			if (zoom === "fit") {\n				const stage = $(".stage", item);\n				const pad = parseFloat(getComputedStyle(stage).paddingLeft) * 2;\n				const columns = viewer.dataset.mode === "side" && !item.hasAttribute("data-single") ? 2 : 1;\n				const width = (stage.clientWidth - pad - (columns - 1) * 16) / columns;\n				const maxW = Math.max(...imgs.map((img) => img.naturalWidth));\n				const maxH = Math.max(...imgs.map((img) => img.naturalHeight));\n				scale = Math.min(width / maxW, FIT_HEIGHT / maxH);\n			}\n			imgs.forEach((img) => {\n				img.style.inlineSize = `${Math.round(img.naturalWidth * scale)}px`;\n				img.classList.toggle("upscaled", scale > 1);\n			});\n		}\n		new ResizeObserver(() => viewer.dataset.zoom === "fit" && applyZoom()).observe(viewer);\n\n		function syncModes() {\n			const single = current().hasAttribute("data-single");\n			$$("button", modes).forEach((b) => {\n				if (b.dataset.mode === "side") return;\n				if (single) b.setAttribute("aria-disabled", "true");\n				else b.removeAttribute("aria-disabled");\n			});\n		}\n\n		function show(i) {\n			index = (i + items.length) % items.length;\n			items.forEach((item, k) => (item.hidden = k !== index));\n			listButtons.forEach((b, k) => (k === index ? b.setAttribute("aria-current", "true") : b.removeAttribute("aria-current")));\n			$(".pager-count", viewer).textContent = `${index + 1} of ${items.length}`;\n			syncModes();\n			applyZoom();\n		}\n\n		// Natural dimensions under each image header.\n		items.forEach((item) =>\n			$$("img", item).forEach((img) => {\n				const write = () => {\n					const out = $(`[data-dims="${img.dataset.side}"]`, item);\n					if (out) out.textContent = `${img.dataset.side} ${img.naturalWidth}\xD7${img.naturalHeight}`;\n				};\n				if (img.complete && img.naturalWidth) write();\n				else img.addEventListener("load", write, { once: true });\n			}),\n		);\n\n		$(".toolbar", viewer).addEventListener("click", (e) => {\n			const b = e.target.closest("button");\n			if (!b || b.getAttribute("aria-disabled") === "true") return;\n			for (const key of ["mode", "bg", "zoom"]) {\n				if (b.dataset[key] === undefined) continue;\n				viewer.dataset[key] = b.dataset[key];\n				press(b.parentElement, b);\n				if (key !== "bg") applyZoom();\n				if (key !== "zoom") store.set(key, b.dataset[key]);\n			}\n		});\n		for (const key of ["mode", "bg"]) {\n			const saved = store.get(key);\n			const b = saved && $(`button[data-${key}="${saved}"]`, viewer);\n			if (b) {\n				viewer.dataset[key] = saved;\n				press(b.parentElement, b);\n			}\n		}\n\n		// Range inputs drive --opacity / --pos; keep the filled track in sync.\n		$$(\'input[type="range"]\', viewer).forEach((input) => {\n			const output = input.nextElementSibling;\n			const sync = () => {\n				const v = Number(input.value);\n				input.style.setProperty("--control-value", v);\n				input.style.setProperty("--attr-min", input.min || 0);\n				input.style.setProperty("--attr-max", input.max || 100);\n				viewer.style.setProperty(input.dataset.control === "opacity" ? "--opacity" : "--pos", input.dataset.control === "opacity" ? v / 100 : `${v}%`);\n				output.textContent = `${v}%`;\n			};\n			input.addEventListener("input", sync);\n			sync();\n		});\n\n		// Drag directly on the image in swipe mode.\n		const swipeInput = $(\'input[data-control="pos"]\', viewer);\n		items.forEach((item) => {\n			const layers = $(".layers", item);\n			const move = (e) => {\n				const box = layers.getBoundingClientRect();\n				swipeInput.value = String(Math.round(Math.min(100, Math.max(0, ((e.clientX - box.left) / box.width) * 100))));\n				swipeInput.dispatchEvent(new Event("input"));\n			};\n			layers.addEventListener("pointerdown", (e) => {\n				if (viewer.dataset.mode !== "swipe" || item.hasAttribute("data-single")) return;\n				layers.setPointerCapture(e.pointerId);\n				move(e);\n				layers.addEventListener("pointermove", move);\n				layers.addEventListener("pointerup", () => layers.removeEventListener("pointermove", move), { once: true });\n			});\n		});\n\n		listButtons.forEach((b, k) => b.addEventListener("click", () => show(k)));\n		$$("[data-step]", viewer).forEach((b) => b.addEventListener("click", () => show(index + Number(b.dataset.step))));\n		document.addEventListener("keydown", (e) => {\n			if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;\n			if ($("#panel-visual")?.hidden || e.target.closest("input, textarea, select, [contenteditable]")) return;\n			if (e.key === "j" || e.key === "k") show(index + (e.key === "j" ? 1 : -1));\n		});\n\n		show(0);\n	}\n})();\n';
+var report_page_client_default = '/* Browser script for the visual diff page (inlined by page.js). */\n(() => {\n	const $ = (sel, root = document) => root.querySelector(sel);\n	const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];\n	const store = {\n		get(key) {\n			try {\n				return localStorage.getItem(`file-diff:${key}`);\n			} catch {\n				return null;\n			}\n		},\n		set(key, value) {\n			try {\n				localStorage.setItem(`file-diff:${key}`, value);\n			} catch {\n				// Storage blocked; the choice still applies to this view.\n			}\n		},\n	};\n\n	const code = $(".code-main");\n\n	/** Index an arrow, Home or End key moves to in a horizontal list, or undefined for other keys. */\n	function targetIndex(key, i, length, rtl) {\n		const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[key];\n		if (step) return (i + step + length) % length;\n		if (key === "Home") return 0;\n		if (key === "End") return length - 1;\n		return undefined;\n	}\n\n	/* ---- Tabs: selection follows focus, roving tabindex ------------------ */\n	const tablist = $(\'[role="tablist"]\');\n	const tabs = $$(\'[role="tab"]\', tablist);\n	const panelFor = (tab) => document.getElementById(tab.id.replace(/^tab-/, "panel-"));\n\n	function selectTab(tab, { focus = false, push = true } = {}) {\n		tabs.forEach((t) => {\n			const on = t === tab;\n			t.setAttribute("aria-selected", String(on));\n			t.tabIndex = on ? 0 : -1;\n			const panel = panelFor(t);\n			if (on) panel.removeAttribute("hidden");\n			else panel.setAttribute("hidden", "until-found");\n		});\n		if (focus) tab.focus();\n		tab.scrollIntoView({ block: "nearest", inline: "nearest" });\n		if (push) history.replaceState(null, "", `#${tab.id.slice(4)}`);\n	}\n\n	tablist.addEventListener("click", (e) => {\n		const tab = e.target.closest(\'[role="tab"]\');\n		if (tab) selectTab(tab);\n	});\n	tablist.addEventListener("keydown", (e) => {\n		const i = tabs.indexOf(document.activeElement);\n		const next = i < 0 ? undefined : targetIndex(e.key, i, tabs.length, getComputedStyle(tablist).direction === "rtl");\n		if (next === undefined) return;\n		e.preventDefault();\n		selectTab(tabs[next], { focus: true });\n	});\n	// Find-in-page revealed a hidden panel: select its tab.\n	$$(\'[role="tabpanel"]\').forEach((panel) =>\n		panel.addEventListener("beforematch", () => {\n			const tab = document.getElementById(panel.getAttribute("aria-labelledby"));\n			if (tab) selectTab(tab, { push: false });\n		}),\n	);\n\n	/** Shows the tab holding an element, then scrolls to it. */\n	function reveal(el) {\n		const panel = el.closest(\'[role="tabpanel"]\');\n		const tab = panel && document.getElementById(panel.getAttribute("aria-labelledby"));\n		if (tab && tab.getAttribute("aria-selected") !== "true") selectTab(tab, { push: false });\n		const details = el.querySelector("details");\n		if (details) {\n			details.open = true;\n			renderFile(el);\n		}\n		el.scrollIntoView({ block: "start" });\n	}\n\n	document.addEventListener("click", (e) => {\n		const link = e.target.closest(\'a[href^="#f-"]\');\n		if (!link) return;\n		const target = document.getElementById(link.hash.slice(1));\n		if (!target) return;\n		e.preventDefault();\n		reveal(target);\n		history.replaceState(null, "", link.hash);\n	});\n\n	/* ---- Toolbars: one tab stop, arrow keys move (focusgroup fallback) --- */\n	$$(\'[role="toolbar"]\').forEach((bar) => {\n		if ("focusGroup" in HTMLElement.prototype) return bar.setAttribute("focusgroup", "toolbar wrap");\n		const items = () => $$("button", bar);\n		items().forEach((b, i) => (b.tabIndex = i ? -1 : 0));\n		bar.addEventListener("focusin", ({ target }) => {\n			if (items().includes(target)) items().forEach((b) => (b.tabIndex = b === target ? 0 : -1));\n		});\n		bar.addEventListener("keydown", (e) => {\n			const list = items();\n			const i = list.indexOf(document.activeElement);\n			const next = i < 0 ? undefined : targetIndex(e.key, i, list.length, getComputedStyle(bar).direction === "rtl");\n			if (next === undefined) return;\n			e.preventDefault();\n			list[next].focus();\n		});\n	});\n\n	/** Presses one button in a segmented group. */\n	function press(group, button) {\n		$$("button", group).forEach((b) => b.setAttribute("aria-pressed", String(b === button)));\n	}\n\n	/* ---- Code: rows are built from JSON when a file opens ----------------- */\n	const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;" };\n	const esc = (text) => text.replace(/[&<>"\']/g, (c) => ESCAPES[c]);\n\n	/** Escapes a line, wrapping the changed `[start, end, \u2026]` ranges in <mark>. */\n	function markup(text, ranges) {\n		if (!ranges) return esc(text);\n		let out = "";\n		let at = 0;\n		for (let k = 0; k < ranges.length; k += 2) {\n			out += `${esc(text.slice(at, ranges[k]))}<mark>${esc(text.slice(ranges[k], ranges[k + 1]))}</mark>`;\n			at = ranges[k + 1];\n		}\n		return out + esc(text.slice(at));\n	}\n\n	/** Old and new line numbers for every line of a hunk (null where a side has none). */\n	function numbers({ o, n, l }) {\n		let oldNo = o;\n		let newNo = n;\n		return l.map((line) => (line[0] === "-" ? [oldNo++, null] : line[0] === "+" ? [null, newNo++] : line[0] === "\\\\" ? [null, null] : [oldNo++, newNo++]));\n	}\n\n	const metaRow = (line, cols) => `<tr class="meta"><td colspan="${cols}">${esc(line)}</td></tr>`;\n\n	function unifiedRows(hunk) {\n		const nos = numbers(hunk);\n		const rows = [`<tr class="hunk"><td colspan="3">${esc(hunk.h)}</td></tr>`];\n		hunk.l.forEach((line, i) => {\n			const sign = line[0];\n			if (sign === "\\\\") return rows.push(metaRow(line, 3));\n			const kind = sign === "-" ? "del" : sign === "+" ? "add" : "ctx";\n			rows.push(`<tr class="${kind}"><td class="ln">${nos[i][0] ?? ""}</td><td class="ln">${nos[i][1] ?? ""}</td><td class="code"><span class="sign">${sign}</span>${markup(line.slice(1), hunk.m[i])}</td></tr>`);\n		});\n		return rows;\n	}\n\n	const EMPTY_CELLS = \'<td class="ln empty"></td><td class="code empty"></td>\';\n\n	/** Side-by-side rows. Edited line pairs share a row; other changes fill the gaps between them. */\n	function splitRows(hunk) {\n		const nos = numbers(hunk);\n		const pairOf = new Map(hunk.p);\n		const cells = (i, kind, no) => (i < 0 ? EMPTY_CELLS : `<td class="ln ${kind}">${no}</td><td class="code ${kind}">${markup(hunk.l[i].slice(1), hunk.m[i])}</td>`);\n		const rows = [`<tr class="hunk"><td colspan="4">${esc(hunk.h)}</td></tr>`];\n\n		for (let i = 0; i < hunk.l.length; ) {\n			const sign = hunk.l[i][0];\n			if (sign === "\\\\") {\n				rows.push(metaRow(hunk.l[i++], 4));\n			} else if (sign !== "-" && sign !== "+") {\n				const text = markup(hunk.l[i].slice(1));\n				rows.push(`<tr class="ctx"><td class="ln">${nos[i][0]}</td><td class="code">${text}</td><td class="ln">${nos[i][1]}</td><td class="code">${text}</td></tr>`);\n				i++;\n			} else {\n				const dels = [];\n				const adds = [];\n				const notes = [];\n				while (hunk.l[i]?.[0] === "-") dels.push(i++);\n				while (hunk.l[i]?.[0] === "\\\\") notes.push(i++);\n				while (hunk.l[i]?.[0] === "+") adds.push(i++);\n\n				const pairs = [];\n				let di = 0;\n				let ai = 0;\n				const fill = (dEnd, aEnd) => {\n					for (let k = 0, n = Math.max(dEnd - di, aEnd - ai); k < n; k++) pairs.push([di + k < dEnd ? dels[di + k] : -1, ai + k < aEnd ? adds[ai + k] : -1]);\n					di = dEnd;\n					ai = aEnd;\n				};\n				dels.forEach((d, dPos) => {\n					const aPos = adds.indexOf(pairOf.get(d));\n					if (aPos < ai) return;\n					fill(dPos, aPos);\n					pairs.push([d, adds[aPos]]);\n					di = dPos + 1;\n					ai = aPos + 1;\n				});\n				fill(dels.length, adds.length);\n\n				pairs.forEach(([d, a]) => rows.push(`<tr>${cells(d, "del", nos[d]?.[0])}${cells(a, "add", nos[a]?.[1])}</tr>`));\n				notes.forEach((n) => rows.push(metaRow(hunk.l[n], 4)));\n			}\n		}\n		return rows;\n	}\n\n	const parsed = new WeakMap();\n\n	/** Builds a file\'s diff table for the current layout, once per layout. */\n	function renderFile(section) {\n		const scroll = section && $(".diff-scroll", section);\n		if (!scroll || !code) return;\n		const view = code.dataset.view;\n		if (scroll.dataset.view === view) return;\n		if (!parsed.has(scroll)) parsed.set(scroll, JSON.parse($(\'script[type="application/json"]\', scroll).textContent));\n		const rows = parsed.get(scroll).flatMap((hunk) => (view === "split" ? splitRows(hunk) : unifiedRows(hunk)));\n		const table = view === "split" ? `<table class="diff split"><colgroup><col class="ln-col"><col><col class="ln-col"><col></colgroup>${rows.join("")}</table>` : `<table class="diff unified">${rows.join("")}</table>`;\n		$(".rendered", scroll)?.remove();\n		scroll.insertAdjacentHTML("beforeend", `<div class="rendered">${table}</div>`);\n		scroll.dataset.view = view;\n	}\n\n	if (code) {\n		const sections = $$(".file", code);\n		const renderOpen = () => sections.filter((section) => $("details", section).open).forEach(renderFile);\n		const layout = $(\'[aria-label="Diff layout"]\', code);\n		const collapse = $(\'[data-action="collapse"]\', code);\n		const syncCollapse = () => (collapse.textContent = sections.every((section) => $("details", section).open) ? "Collapse all" : "Expand all");\n\n		const setView = (view) => {\n			code.dataset.view = view;\n			press(layout, $(`button[data-view="${view}"]`, code));\n			renderOpen();\n		};\n\n		layout.addEventListener("click", (e) => {\n			const b = e.target.closest("button[data-view]");\n			if (!b) return;\n			setView(b.dataset.view);\n			store.set("view", b.dataset.view);\n		});\n		collapse.addEventListener("click", () => {\n			const open = collapse.textContent.startsWith("Expand");\n			sections.forEach((section) => ($("details", section).open = open));\n			syncCollapse();\n		});\n		// `toggle` doesn\'t bubble, so listen while it travels down.\n		code.addEventListener(\n			"toggle",\n			(e) => {\n				if (e.target.open) renderFile(e.target.closest(".file"));\n				syncCollapse();\n			},\n			true,\n		);\n\n		setView(store.get("view") === "split" ? "split" : "unified");\n		syncCollapse();\n	}\n\n	/* ---- Visual: modes, sliders, swipe drag, zoom, pager ----------------- */\n	const viewer = $(".viewer");\n	if (viewer) {\n		const items = $$(".image-item", viewer);\n		const listButtons = $$(".filelist button", viewer.parentElement);\n		const modes = $(".modes", viewer);\n		let index = 0;\n\n		const current = () => items[index];\n\n		const FIT_HEIGHT = 420;\n\n		/** Sizes both versions by one scale so stacked modes stay aligned. Fit fills the stage. */\n		function applyZoom() {\n			const item = current();\n			const imgs = $$("img", item);\n			if (!imgs.every((img) => img.complete && img.naturalWidth)) {\n				imgs.forEach((img) => img.addEventListener("load", applyZoom, { once: true }));\n				return;\n			}\n			const zoom = viewer.dataset.zoom;\n			let scale = Number(zoom);\n			if (zoom === "fit") {\n				const stage = $(".stage", item);\n				const pad = parseFloat(getComputedStyle(stage).paddingLeft) * 2;\n				const columns = viewer.dataset.mode === "side" && !item.hasAttribute("data-single") ? 2 : 1;\n				const width = (stage.clientWidth - pad - (columns - 1) * 16) / columns;\n				// The stage has no size while its tab is hidden; the ResizeObserver reruns this once it shows.\n				if (width <= 0) return;\n				const maxW = Math.max(...imgs.map((img) => img.naturalWidth));\n				const maxH = Math.max(...imgs.map((img) => img.naturalHeight));\n				scale = Math.min(width / maxW, FIT_HEIGHT / maxH);\n			}\n			imgs.forEach((img) => {\n				img.style.inlineSize = `${Math.round(img.naturalWidth * scale)}px`;\n				img.classList.toggle("upscaled", scale > 1);\n			});\n		}\n		new ResizeObserver(() => viewer.dataset.zoom === "fit" && applyZoom()).observe(viewer);\n\n		function syncModes() {\n			const single = current().hasAttribute("data-single");\n			$$("button", modes).forEach((b) => {\n				if (b.dataset.mode === "side") return;\n				if (single) b.setAttribute("aria-disabled", "true");\n				else b.removeAttribute("aria-disabled");\n			});\n		}\n\n		function show(i) {\n			index = (i + items.length) % items.length;\n			items.forEach((item, k) => (item.hidden = k !== index));\n			listButtons.forEach((b, k) => (k === index ? b.setAttribute("aria-current", "true") : b.removeAttribute("aria-current")));\n			$(".pager-count", viewer).textContent = `${index + 1} of ${items.length}`;\n			syncModes();\n			applyZoom();\n		}\n\n		// Natural dimensions under each image header.\n		items.forEach((item) =>\n			$$("img", item).forEach((img) => {\n				const write = () => {\n					const out = $(`[data-dims="${img.dataset.side}"]`, item);\n					if (out) out.textContent = `${img.dataset.side} ${img.naturalWidth}\xD7${img.naturalHeight}`;\n				};\n				if (img.complete && img.naturalWidth) write();\n				else img.addEventListener("load", write, { once: true });\n			}),\n		);\n\n		$(".toolbar", viewer).addEventListener("click", (e) => {\n			const b = e.target.closest("button");\n			if (!b || b.getAttribute("aria-disabled") === "true") return;\n			for (const key of ["mode", "bg", "zoom"]) {\n				if (b.dataset[key] === undefined) continue;\n				viewer.dataset[key] = b.dataset[key];\n				press(b.parentElement, b);\n				if (key !== "bg") applyZoom();\n				if (key !== "zoom") store.set(key, b.dataset[key]);\n			}\n		});\n		for (const key of ["mode", "bg"]) {\n			const saved = store.get(key);\n			const b = saved && $(`button[data-${key}="${saved}"]`, viewer);\n			if (b) {\n				viewer.dataset[key] = saved;\n				press(b.parentElement, b);\n			}\n		}\n\n		// Range inputs drive --opacity / --pos; keep the filled track in sync.\n		$$(\'input[type="range"]\', viewer).forEach((input) => {\n			const output = input.nextElementSibling;\n			const sync = () => {\n				const v = Number(input.value);\n				input.style.setProperty("--control-value", v);\n				input.style.setProperty("--attr-min", input.min || 0);\n				input.style.setProperty("--attr-max", input.max || 100);\n				viewer.style.setProperty(input.dataset.control === "opacity" ? "--opacity" : "--pos", input.dataset.control === "opacity" ? v / 100 : `${v}%`);\n				output.textContent = `${v}%`;\n			};\n			input.addEventListener("input", sync);\n			sync();\n		});\n\n		// Drag directly on the image in swipe mode.\n		const swipeInput = $(\'input[data-control="pos"]\', viewer);\n		items.forEach((item) => {\n			const layers = $(".layers", item);\n			const move = (e) => {\n				const box = layers.getBoundingClientRect();\n				swipeInput.value = String(Math.round(Math.min(100, Math.max(0, ((e.clientX - box.left) / box.width) * 100))));\n				swipeInput.dispatchEvent(new Event("input"));\n			};\n			layers.addEventListener("pointerdown", (e) => {\n				if (viewer.dataset.mode !== "swipe" || item.hasAttribute("data-single")) return;\n				layers.setPointerCapture(e.pointerId);\n				move(e);\n				layers.addEventListener("pointermove", move);\n				// Fires after pointerup and pointercancel alike, so the listener never outlives the drag.\n				layers.addEventListener("lostpointercapture", () => layers.removeEventListener("pointermove", move), { once: true });\n			});\n		});\n\n		listButtons.forEach((b, k) => b.addEventListener("click", () => show(k)));\n		$$("[data-step]", viewer).forEach((b) => b.addEventListener("click", () => show(index + Number(b.dataset.step))));\n		document.addEventListener("keydown", (e) => {\n			if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;\n			if ($("#panel-visual")?.hidden || e.target.closest("input, textarea, select, [contenteditable]")) return;\n			if (e.key === "j" || e.key === "k") show(index + (e.key === "j" ? 1 : -1));\n		});\n\n		show(0);\n	}\n\n	/* ---- Open the tab or file named in the URL ---------------------------- */\n	const initial = location.hash.slice(1);\n	const initialTab = document.getElementById(`tab-${initial}`);\n	if (initialTab) selectTab(initialTab, { push: false });\n	else if (initial && document.getElementById(initial)) reveal(document.getElementById(initial));\n})();\n';
 
 // src/page.js
 var INTRALINE_LIMIT = 1e3;
@@ -30473,86 +30526,102 @@ function deltaHtml(head, base) {
   return `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "+" : "\u2212"}${escapeHtml(bytesToSize(Math.abs(d)))}${percent}</span>`;
 }
 var rowStatus = (head, base, hasBase) => {
-  if (!hasBase) return "added";
+  if (!hasBase) return "unchanged";
   if (base == null) return "added";
   if (head == null) return "removed";
   return head === base ? "unchanged" : "modified";
 };
-function intraline(oldText, newText) {
-  if (oldText.length > INTRALINE_LIMIT || newText.length > INTRALINE_LIMIT) return [escapeHtml(oldText), escapeHtml(newText)];
-  let oldHtml = "";
-  let newHtml = "";
+var PAIR_THRESHOLD = 0.5;
+var PAIR_LIMIT = 400;
+var solid = (text) => text.replace(/\s+/g, "").length;
+function compareLines(oldText, newText) {
+  const none = { similarity: 0, old: [], new: [] };
+  if (oldText.length > INTRALINE_LIMIT || newText.length > INTRALINE_LIMIT) return none;
+  const longest = Math.max(1, solid(oldText), solid(newText));
+  if (Math.min(solid(oldText), solid(newText)) / longest < PAIR_THRESHOLD) return none;
+  const old = [];
+  const next = [];
+  let oldAt = 0;
+  let newAt = 0;
+  let common = 0;
+  const push = (ranges, start, end) => ranges.length > 0 && ranges.at(-1) === start ? ranges[ranges.length - 1] = end : ranges.push(start, end);
   diffWordsWithSpace(oldText, newText).forEach(({ added, removed, value }) => {
-    if (added) newHtml += `<mark>${escapeHtml(value)}</mark>`;
-    else if (removed) oldHtml += `<mark>${escapeHtml(value)}</mark>`;
-    else {
-      oldHtml += escapeHtml(value);
-      newHtml += escapeHtml(value);
+    if (added) {
+      push(next, newAt, newAt + value.length);
+      newAt += value.length;
+    } else if (removed) {
+      push(old, oldAt, oldAt + value.length);
+      oldAt += value.length;
+    } else {
+      common += solid(value);
+      oldAt += value.length;
+      newAt += value.length;
     }
   });
-  return [oldHtml, newHtml];
+  return { similarity: common / longest, old, new: next };
 }
-function walkHunk({ oldStart, newStart, lines: raw }) {
-  const lines = [];
-  const pairs = [];
-  let oldNo = oldStart;
-  let newNo = newStart;
-  let i = 0;
-  while (i < raw.length) {
-    const sign = raw[i][0];
-    if (sign === "-" || sign === "+") {
-      const dels = [];
-      const adds = [];
-      while (i < raw.length && raw[i][0] === "-") dels.push({ type: "del", oldNo: oldNo++, text: raw[i++].slice(1) });
-      while (i < raw.length && raw[i][0] === "+") adds.push({ type: "add", newNo: newNo++, text: raw[i++].slice(1) });
-      const count = Math.max(dels.length, adds.length);
-      for (let k = 0; k < count; k++) {
-        const del = dels[k];
-        const add = adds[k];
-        if (del && add) [del.html, add.html] = intraline(del.text, add.text);
-        else if (del) del.html = escapeHtml(del.text);
-        else add.html = escapeHtml(add.text);
-        pairs.push([del, add]);
-      }
-      lines.push(...dels, ...adds);
-    } else if (sign === "\\") {
-      const meta = { type: "meta", html: escapeHtml(raw[i++]) };
-      lines.push(meta);
-      pairs.push(meta);
-    } else {
-      const ctx = { type: "ctx", oldNo: oldNo++, newNo: newNo++, html: escapeHtml(raw[i++].slice(1)) };
-      lines.push(ctx);
-      pairs.push(ctx);
+function pairLines(oldTexts, newTexts) {
+  if (oldTexts.length === 0 || newTexts.length === 0) return [];
+  const cells = /* @__PURE__ */ new Map();
+  const score = (i, j) => {
+    const key = i * newTexts.length + j;
+    if (!cells.has(key)) cells.set(key, compareLines(oldTexts[i], newTexts[j]));
+    return cells.get(key);
+  };
+  if (oldTexts.length * newTexts.length > PAIR_LIMIT) {
+    const pairs2 = [];
+    for (let k = 0; k < Math.min(oldTexts.length, newTexts.length); k++) {
+      const { similarity, old, new: next } = score(k, k);
+      if (similarity >= PAIR_THRESHOLD) pairs2.push({ del: k, add: k, old, new: next });
+    }
+    return pairs2;
+  }
+  const rows = oldTexts.length + 1;
+  const cols = newTexts.length + 1;
+  const best = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const { similarity } = score(i - 1, j - 1);
+      best[i][j] = Math.max(best[i - 1][j], best[i][j - 1], similarity >= PAIR_THRESHOLD ? best[i - 1][j - 1] + similarity : 0);
     }
   }
-  return { lines, pairs };
+  const pairs = [];
+  for (let i = rows - 1, j = cols - 1; i > 0 && j > 0; ) {
+    const { similarity, old, new: next } = score(i - 1, j - 1);
+    if (similarity >= PAIR_THRESHOLD && best[i][j] === best[i - 1][j - 1] + similarity) {
+      pairs.push({ del: i - 1, add: j - 1, old, new: next });
+      i--;
+      j--;
+    } else if (best[i][j] === best[i - 1][j]) i--;
+    else j--;
+  }
+  return pairs.reverse();
 }
-function renderDiff(hunks) {
-  const unified = [];
-  const split = [];
-  const sign = { add: "+", del: "-", ctx: " " };
-  hunks.forEach((hunk) => {
-    const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
-    unified.push(`<tr class="hunk"><td colspan="3">${header}</td></tr>`);
-    split.push(`<tr class="hunk"><td colspan="4">${header}</td></tr>`);
-    const { lines, pairs } = walkHunk(hunk);
-    lines.forEach((line) => {
-      if (line.type === "meta") return unified.push(`<tr class="meta"><td colspan="3">${line.html}</td></tr>`);
-      unified.push(`<tr class="${line.type}"><td class="ln">${line.oldNo ?? ""}</td><td class="ln">${line.newNo ?? ""}</td><td class="code"><span class="sign">${sign[line.type]}</span>${line.html}</td></tr>`);
+function hunkData({ oldStart, oldLines, newStart, newLines, lines }) {
+  const p = [];
+  const m = {};
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i][0] !== "-" && lines[i][0] !== "+") {
+      i++;
+      continue;
+    }
+    const dels = [];
+    const adds = [];
+    while (lines[i]?.[0] === "-") dels.push(i++);
+    if (dels.length > 0 && lines[i]?.[0] === "\\") i++;
+    while (lines[i]?.[0] === "+") adds.push(i++);
+    pairLines(
+      dels.map((k) => lines[k].slice(1)),
+      adds.map((k) => lines[k].slice(1))
+    ).forEach((pair) => {
+      p.push([dels[pair.del], adds[pair.add]]);
+      if (pair.old.length) m[dels[pair.del]] = pair.old;
+      if (pair.new.length) m[adds[pair.add]] = pair.new;
     });
-    pairs.forEach((pair) => {
-      if (!Array.isArray(pair)) {
-        if (pair.type === "meta") return split.push(`<tr class="meta"><td colspan="4">${pair.html}</td></tr>`);
-        return split.push(`<tr class="ctx"><td class="ln">${pair.oldNo}</td><td class="code">${pair.html}</td><td class="ln">${pair.newNo}</td><td class="code">${pair.html}</td></tr>`);
-      }
-      const [del, add] = pair;
-      const left = del ? `<td class="ln del">${del.oldNo}</td><td class="code del">${del.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
-      const right = add ? `<td class="ln add">${add.newNo}</td><td class="code add">${add.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
-      split.push(`<tr>${left}${right}</tr>`);
-    });
-  });
-  return `<table class="diff unified">${unified.join("")}</table><table class="diff split"><colgroup><col class="ln-col"><col><col class="ln-col"><col></colgroup>${split.join("")}</table>`;
+  }
+  return { h: `@@ -${oldStart},${oldLines} +${newStart},${newLines} @@`, o: oldStart, n: newStart, l: lines, p, m };
 }
+var scriptJson = (value) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 function renderCards({ hasBase, changes, totals }) {
   const { stats } = changes;
   const files = stats.added + stats.removed + stats.modified;
@@ -30566,8 +30635,12 @@ function renderCards({ hasBase, changes, totals }) {
 <article class="card"><h2>Visual</h2><p class="metric">${changes.images.length}</p><p class="sub">${changes.images.length === 1 ? "image" : "images"} changed</p></article>
 </section>`;
 }
-function renderOverview({ rows, hasBase }, anchors) {
-  if (rows.length === 0) return '<p class="empty-state">No size changes.</p>';
+function renderOverview({ rows, hasBase, changes }, anchors) {
+  if (rows.length === 0) {
+    const { added, removed, modified } = changes.stats;
+    const files = added + removed + modified;
+    return `<p class="empty-state">No size changes.${files > 0 ? ` ${files} ${files === 1 ? "file differs" : "files differ"} in content only. See the Code tab.` : ""}</p>`;
+  }
   const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
   const pct = (v) => `${(barScale(v, max) * 100).toFixed(1)}%`;
   const groups = /* @__PURE__ */ new Map();
@@ -30577,14 +30650,13 @@ function renderOverview({ rows, hasBase }, anchors) {
     groups.get(key).push(row);
   });
   const body = [...groups.values()].map((group2) => {
-    const { packageName, packageDir } = group2[0];
+    const { packageName } = group2[0];
     const head = group2.reduce((sum, r) => sum + (r.headByteSize ?? 0), 0);
     const base = group2.reduce((sum, r) => sum + (r.baseByteSize ?? 0), 0);
     const header = `<tr class="pkg"><th scope="rowgroup" colspan="2">${escapeHtml(packageName)} <span class="muted">${group2.length} ${group2.length === 1 ? "file" : "files"}</span></th>${hasBase ? `<td class="num">${escapeHtml(bytesToSize(base))}</td>` : ""}<td class="num">${escapeHtml(bytesToSize(head))}</td>${hasBase ? `<td class="num">${deltaHtml(head, base)}</td>` : ""}<td></td></tr>`;
-    const items = group2.map(({ file, headByteSize, baseByteSize }) => {
+    const items = group2.map(({ file, path: path11, headByteSize, baseByteSize }) => {
       const status = rowStatus(headByteSize, baseByteSize, hasBase);
-      const path11 = packageDir ? [...anchors.keys()].find((p) => p.startsWith(`${packageDir}/`) && p.endsWith(`/${file}`)) : void 0;
-      const name = path11 ? `<a href="#${anchors.get(path11)}">${escapeHtml(file)}</a>` : escapeHtml(file);
+      const name = anchors.has(path11) ? `<a href="#${anchors.get(path11)}">${escapeHtml(file)}</a>` : escapeHtml(file);
       const bars = `${hasBase ? `<span class="bar base" style="inline-size:${pct(baseByteSize)}"></span>` : ""}<span class="bar head" style="inline-size:${pct(headByteSize)}"></span>`;
       return `<tr><td><span class="dot ${status}" title="${status}"></span><span class="sr-only">${status}</span></td><td class="file-cell">${name}</td>${hasBase ? `<td class="num">${escapeHtml(bytesToSize(baseByteSize))}</td>` : ""}<td class="num">${escapeHtml(bytesToSize(headByteSize))}</td>${hasBase ? `<td class="num">${deltaHtml(headByteSize, baseByteSize)}</td>` : ""}<td class="chart" aria-hidden="true">${bars}</td></tr>`;
     });
@@ -30601,6 +30673,7 @@ function renderFileList(items, label, buttons = false) {
   });
   return `<nav class="filelist" aria-label="${escapeHtml(label)}"><ul>${entries.join("")}</ul></nav>`;
 }
+var OPEN_LINES = 800;
 function renderCode({ changes }, anchors) {
   if (changes.text.length === 0) return '<p class="empty-state">No text changes.</p>';
   const counts = (c) => c.skipped ? '<span class="muted">skipped</span>' : `<span class="add">+${c.additions}</span> <span class="del">\u2212${c.deletions}</span>`;
@@ -30608,9 +30681,17 @@ function renderCode({ changes }, anchors) {
     changes.text.map((c) => ({ id: anchors.get(c.file), file: c.file, status: c.status, meta: counts(c) })),
     "Changed files"
   );
-  const files = changes.text.map((c) => {
-    const body = c.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(c.skipped)}.</p>` : `<div class="diff-scroll">${renderDiff(c.hunks)}</div>`;
-    return `<section class="file" id="${anchors.get(c.file)}"><details open><summary><span class="chev">${ICON.chevron}</span><span class="pill ${c.status}">${c.status}</span><span class="path">${pathHtml(c.file)}</span><span class="meta">${counts(c)}</span></summary>${body}</details></section>`;
+  let shown = 0;
+  const files = changes.text.map((c, i) => {
+    const size = c.hunks.reduce((sum, hunk) => sum + hunk.lines.length + 1, 0);
+    const open2 = c.hunks.length > 0 && (i === 0 || shown + size <= OPEN_LINES);
+    if (open2) shown += size;
+    let body;
+    if (c.skipped) body = `<p class="note">Line diff skipped: ${escapeHtml(c.skipped)}.</p>`;
+    else if (c.omitted) body = `<p class="note">Diff left out because ${escapeHtml(c.omitted)}. Raise <code>max-diff-lines</code> to include it.</p>`;
+    else if (c.hunks.length === 0) body = '<p class="note">No line changes.</p>';
+    else body = `<div class="diff-scroll"><script type="application/json">${scriptJson(c.hunks.map(hunkData))}</script></div>`;
+    return `<section class="file" id="${anchors.get(c.file)}"><details${open2 ? " open" : ""}><summary><span class="chev">${ICON.chevron}</span><span class="pill ${c.status}">${c.status}</span><span class="path">${pathHtml(c.file)}</span><span class="meta">${counts(c)}</span></summary>${body}</details></section>`;
   }).join("");
   return `<div class="layout">${list}<div class="main code-main" data-view="unified">
 <div class="toolbar" role="toolbar" aria-label="Diff options">
@@ -30618,6 +30699,7 @@ function renderCode({ changes }, anchors) {
 <span class="spacer"></span>
 <button type="button" class="ghost" data-action="collapse">Collapse all</button>
 </div>
+<noscript><p class="note">Diffs are drawn by script. Enable JavaScript to see them.</p></noscript>
 ${files}</div></div>`;
 }
 function renderVisual({ changes, imageUrls = /* @__PURE__ */ new Map() }) {
@@ -30699,7 +30781,7 @@ function reportFiles(options) {
       ["base", image.basePath, image.baseByteSize]
     ].forEach(([side, path11, size]) => {
       if (!path11 || size > MAX_IMAGE_SIZE) return;
-      files.push({ path: `images/${side}/${image.file}`, content: readFileSync4(path11) });
+      files.push({ path: `images/${side}/${image.file}`, content: readFileSync3(path11) });
       urls[side] = `images/${side}/${encodePath(image.file)}`;
     });
     imageUrls.set(image.file, urls);
@@ -30708,89 +30790,86 @@ function reportFiles(options) {
   return files;
 }
 
-// src/index.js
-var VISUAL_DIFF_MODES = /* @__PURE__ */ new Set(["summary", "branch", "none"]);
-function getBooleanInput2(name, fallback) {
-  if (!getInput(name)) return fallback;
-  return getBooleanInput(name);
-}
-function runUrl() {
-  const { GITHUB_SERVER_URL = "https://github.com", GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT } = process.env;
+// src/run.js
+var COMMENT_RESERVE = 3e3;
+function runUrl(env) {
+  const { GITHUB_SERVER_URL = "https://github.com", GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT } = env;
   if (!GITHUB_REPOSITORY || !GITHUB_RUN_ID) return void 0;
   const attempt = GITHUB_RUN_ATTEMPT && GITHUB_RUN_ATTEMPT !== "1" ? `/attempts/${GITHUB_RUN_ATTEMPT}` : "";
   return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}${attempt}`;
 }
-async function run() {
-  const token = getInput("token");
-  const headPath = getInput("head-path");
-  const basePath = getInput("base-path");
-  const fileGlobPattern = getMultilineInput("file-glob-pattern", { trimWhitespace: true });
-  const shouldAddComment = getBooleanInput2("comment", true);
-  const commentHeader = getInput("comment-header") || "## File metrics";
-  const buildDir = getInput("build-dir") || DEFAULT_BUILD_DIR;
-  const mainFile = getInput("main-file") || DEFAULT_MAIN_FILE;
-  const readPackageJson = getBooleanInput2("read-package-json", true);
-  const extensions = getMultilineInput("extensions", { trimWhitespace: true });
-  const visualDiff = (getInput("visual-diff") || "summary").trim().toLowerCase();
-  const reportBranch = getInput("report-branch") || DEFAULT_REPORT_BRANCH;
-  const pagesUrl = getInput("pages-url");
-  const maxDiffSize = Number(getInput("max-diff-size") || DEFAULT_MAX_DIFF_SIZE);
-  if (!VISUAL_DIFF_MODES.has(visualDiff)) throw new Error(`Invalid visual-diff "${visualDiff}"; expected one of: ${[...VISUAL_DIFF_MODES].join(", ")}.`);
-  if (!Number.isFinite(maxDiffSize) || maxDiffSize < 0) throw new Error(`Invalid max-diff-size "${getInput("max-diff-size")}"; expected a byte count.`);
-  const pullRequest = context2.payload.pull_request;
-  const dir = reportDir({ pullNumber: pullRequest?.number, sha: pullRequest?.head?.sha ?? context2.sha });
-  if (visualDiff === "branch" && pullRequest && context2.payload.action === "closed") {
-    const { owner, repo } = context2.repo;
-    const sha = await publishToBranch({ octokit: getOctokit(token), owner, repo, branch: reportBranch, dir, files: [], message: `chore: remove file diff report for #${pullRequest.number}` });
-    info(sha ? `Removed ${dir}/ from ${reportBranch}.` : `Nothing to remove for ${dir}/ on ${reportBranch}.`);
+async function run({ core, context: context3, getOctokit: getOctokit2, env = process.env }) {
+  const inputs = readInputs(core);
+  const pullRequest = context3.payload.pull_request;
+  const dir = reportDir({ pullNumber: pullRequest?.number, sha: pullRequest?.head?.sha ?? context3.sha });
+  let client;
+  const octokit = () => client ??= getOctokit2(inputs.token);
+  if (inputs.visualDiff === "branch" && pullRequest && context3.payload.action === "closed") {
+    const { owner, repo } = context3.repo;
+    const sha = await publishToBranch({ octokit: octokit(), owner, repo, branch: inputs.reportBranch, dir, files: [], message: `chore: remove file diff report for #${pullRequest.number}` });
+    core.info(sha ? `Removed ${dir}/ from ${inputs.reportBranch}.` : `Nothing to remove for ${dir}/ on ${inputs.reportBranch}.`);
     return;
   }
-  const headMap = await fetchFilesAndSizes(headPath, fileGlobPattern, { core: core_exports, required: true });
-  const baseMap = await fetchFilesAndSizes(basePath, fileGlobPattern, { core: core_exports, required: false });
+  const [headMap, baseMap] = await Promise.all([fetchFilesAndSizes(inputs.headPath, inputs.fileGlobPattern, { core, required: true }), fetchFilesAndSizes(inputs.basePath, inputs.fileGlobPattern, { core, required: false })]);
   const hasBase = baseMap.size > 0;
-  const report = buildReport({ headMap, baseMap, hasBase, rootPath: headPath, buildDir, mainFile, readPackageJson, extensions, core: core_exports });
+  const reportOptions = { headMap, baseMap, hasBase, rootPath: inputs.headPath, buildDir: inputs.buildDir, mainFile: inputs.mainFile, readPackageJson: inputs.readPackageJson, extensions: inputs.extensions, core };
+  const report = buildReport(reportOptions);
+  const reportWithin = (limit) => report.text.length <= limit ? report : buildReport({ ...reportOptions, maxLength: limit });
   let changes;
   let link;
   let summaryMarkdown = "";
-  if (visualDiff !== "none") {
-    changes = collectChanges({ headMap, baseMap, headRoot: headPath, baseRoot: basePath, extensions, maxDiffSize });
+  if (inputs.visualDiff !== "none") {
+    changes = await collectChanges({ headMap, baseMap, headRoot: inputs.headPath, baseRoot: inputs.basePath, extensions: inputs.extensions, maxDiffSize: inputs.maxDiffSize, maxDiffLines: inputs.maxDiffLines, core });
     const rows = sizeRows(report.sections);
     const totals = { headTotal: report.headTotal, baseTotal: report.baseTotal };
-    if (visualDiff === "branch") {
+    if (inputs.visualDiff === "branch") {
       try {
-        const octokit = getOctokit(token);
-        const { owner, repo } = context2.repo;
+        const { owner, repo } = context3.repo;
         const where = pullRequest ? `${owner}/${repo}#${pullRequest.number}` : `${owner}/${repo}`;
-        const files = reportFiles({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, context: `${where} @ ${(pullRequest?.head?.sha ?? context2.sha ?? "").slice(0, 7)}` });
-        await publishToBranch({ octokit, owner, repo, branch: reportBranch, dir, files, message: `chore: file diff report for ${pullRequest ? `#${pullRequest.number}` : dir}` });
-        link = await reportUrl({ octokit, owner, repo, dir, pagesUrl });
-        info(`Published the visual diff to ${reportBranch}/${dir}/ (${link}).`);
+        const files = reportFiles({ title: inputs.commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, context: `${where} @ ${(pullRequest?.head?.sha ?? context3.sha ?? "").slice(0, 7)}` });
+        await publishToBranch({ octokit: octokit(), owner, repo, branch: inputs.reportBranch, dir, files, message: `chore: file diff report for ${pullRequest ? `#${pullRequest.number}` : dir}` });
+        link = await reportUrl({ octokit: octokit(), owner, repo, dir, pagesUrl: inputs.pagesUrl });
+        core.info(`Published the visual diff to ${inputs.reportBranch}/${dir}/ (${link}).`);
       } catch (error2) {
-        warning(`Unable to publish the visual diff to "${reportBranch}" (${error2.message}). Falling back to the job summary; the token needs contents: write.`);
+        core.warning(`Unable to publish the visual diff to "${inputs.reportBranch}" (${error2.message}). Falling back to the job summary; the token needs contents: write.`);
       }
     }
-    const summaryLink = runUrl();
-    summaryMarkdown = renderSummaryMarkdown({ rows, hasBase, changes, budget: Math.max(0, SUMMARY_BUDGET - Buffer.byteLength(report.text)), reportUrl: link });
-    link ??= summaryLink;
+    const summaryReport = reportWithin(SUMMARY_BUDGET / 2);
+    summaryMarkdown = renderSummaryMarkdown({ rows, hasBase, changes, budget: Math.max(0, SUMMARY_BUDGET - Buffer.byteLength(summaryReport.text)), reportUrl: link });
+    link ??= runUrl(env);
   }
-  const marker = commentMarker(commentHeader);
+  const marker = commentMarker(inputs.commentHeader);
   const stats = changes ? renderStats({ stats: changes.stats, imageCount: changes.images.length }) : "";
+  const commentReport = reportWithin(COMMENT_LIMIT - COMMENT_RESERVE);
+  const omittedNote = commentReport.omitted.files > 0 ? `<em>Some rows were left out to fit GitHub's comment limit.${link ? ` See the [full report](${link}).` : ""}</em>` : "";
   const commentStats = [stats, link ? `\u{1F4CA} [View the visual diff](${link})` : ""].filter(Boolean).join("<br/>\n");
-  const content = [marker, commentHeader, "", ...commentStats ? [commentStats, ""] : [], report.text].join("\n");
-  if (shouldAddComment) {
-    await addComment({ marker, content, token, core: core_exports });
+  const content = [marker, inputs.commentHeader, "", ...commentStats ? [commentStats, ""] : [], commentReport.text, ...omittedNote ? ["", omittedNote] : []].join("\n");
+  if (inputs.comment) {
+    if (!pullRequest) core.info("Not running on a pull request; skipping the comment.");
+    else {
+      try {
+        const { owner, repo } = context3.repo;
+        const { action, id } = await upsertComment({ octokit: octokit(), owner, repo, issueNumber: pullRequest.number, marker, content });
+        core.info(`${action === "created" ? "Posted" : "Updated"} the pull request comment (${id}).`);
+      } catch (error2) {
+        core.warning(`Unable to post the pull request comment (${error2.message}). The report is in the job summary; grant pull-requests: write to post it.`);
+      }
+    }
   }
-  startGroup(commentHeader);
-  info(report.text);
-  endGroup();
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    await summary.addRaw([commentHeader, "", ...stats ? [stats, ""] : [], report.text, "", summaryMarkdown].join("\n"), true).write();
+  core.startGroup(inputs.commentHeader);
+  core.info(report.text);
+  core.endGroup();
+  if (env.GITHUB_STEP_SUMMARY) {
+    const summaryReport = reportWithin(SUMMARY_BUDGET / 2);
+    await core.summary.addRaw([inputs.commentHeader, "", ...stats ? [stats, ""] : [], summaryReport.text, "", summaryMarkdown].join("\n"), true).write();
   }
-  setOutput("total-size", String(report.headTotal));
-  setOutput("has-changed", report.hasChanged ? "true" : "false");
-  setOutput("report-url", link ?? "");
+  core.setOutput("total-size", String(report.headTotal));
+  core.setOutput("has-changed", report.hasChanged ? "true" : "false");
+  core.setOutput("report-url", link ?? "");
 }
-run().catch((error2) => {
+
+// src/index.js
+run({ core: core_exports, context: context2, getOctokit }).catch((error2) => {
   error(error2.stack ?? String(error2));
   setFailed(error2.message);
 });

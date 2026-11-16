@@ -158,6 +158,10 @@ export function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY
 			out.push(heading, "", `_Line diff skipped: ${change.skipped}._`, "");
 			return;
 		}
+		if (change.omitted) {
+			out.push(heading, "", `_Diff left out because ${change.omitted}. Raise \`max-diff-lines\` to include it._`, "");
+			return;
+		}
 		const diff = unifiedDiff(change);
 		const fence = fenceFor(diff);
 		const block = [heading, "", `${fence}diff`, diff, fence, ""].join("\n");

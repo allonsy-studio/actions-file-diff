@@ -34,7 +34,8 @@ async function writeVariant({ outDir, head, base, title, live }) {
 	const hasBase = baseMap.size > 0;
 
 	const report = buildReport({ headMap, baseMap, hasBase, rootPath: head, core: quiet });
-	const changes = collectChanges({ headMap, baseMap, headRoot: head, baseRoot: base });
+	// A budget the largest sample file exceeds, so the preview also shows a diff that was left out.
+	const changes = await collectChanges({ headMap, baseMap, headRoot: head, baseRoot: base, maxDiffLines: 2500, core: quiet });
 	const rows = sizeRows(report.sections);
 	const totals = { headTotal: report.headTotal, baseTotal: report.baseTotal };
 

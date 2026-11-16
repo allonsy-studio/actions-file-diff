@@ -44,6 +44,7 @@
 		"preview": "node scripts/preview.js",
 		"release": "yarn build && opx release publish",
 		"test": "NODE_OPTIONS=--experimental-vm-modules jest",
+		"test:browser": "node --test test/browser.test.js",
 		"version": "opx release version && yarn install --mode update-lockfile"
 	},
 	"dependencies": {
@@ -73,6 +74,7 @@
 		"husky": "^9.1.7",
 		"jest": "^30.4.2",
 		"lint-staged": "^17.0.8",
+		"playwright-core": "^1.65.1",
 		"prettier": "^3.8.5"
 	},
 	"keywords": [

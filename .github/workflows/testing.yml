@@ -70,3 +70,30 @@ jobs:
             - name: Write to job summary
               if: always() && matrix.node == 26
               run: cat code-coverage-results.md >> $GITHUB_STEP_SUMMARY
+
+    browser:
+        name: Report page (Chrome)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Enable corepack
+              run: corepack enable
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version-file: .nvmrc
+                  cache: yarn
+
+            - name: Install dependencies
+              run: yarn install --immutable
+
+            # Renders the sample report and drives it in the Chrome that ships on the runner.
+            - name: Test the report page
+              run: yarn test:browser

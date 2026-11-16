@@ -47,11 +47,11 @@ inputs:
         default: ""
 
     visual-diff:
-        description: "Where to publish the visual diff (size chart, line diffs and changed images) linked from the comment. `summary` writes collapsible sections to the job summary and links the run. `branch` also commits a tabbed HTML page to `report-branch` (needs contents write permission and GitHub Pages). `none` turns it off."
+        description: "Where to publish the visual diff (size chart, line diffs and changed images) linked from the comment. Line diffs need git on the PATH. `summary` writes collapsible sections to the job summary and links the run. `branch` also commits a tabbed HTML page to `report-branch` (needs contents write permission and GitHub Pages). `none` turns it off."
         required: false
         default: "summary"
     report-branch:
-        description: Branch the HTML report is committed to when `visual-diff` is `branch`. Created as an orphan branch when missing.
+        description: Branch the HTML report is committed to when `visual-diff` is `branch`. Created as an orphan branch when missing, and kept to a single commit.
         required: false
         default: "file-diff-reports"
     pages-url:
@@ -62,6 +62,10 @@ inputs:
         description: Largest file (in bytes) that gets a line diff. Larger files are listed without one.
         required: false
         default: "262144"
+    max-diff-lines:
+        description: Most diff lines kept for the whole report. A diff that would go over is left out of the report, with its line counts kept.
+        required: false
+        default: "20000"
 
 outputs:
     has-changed:

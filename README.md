@@ -92,6 +92,12 @@ jobs:
 
 If `base-path` is omitted, or the directory does not exist, the action reports head totals only and `has-changed` is always `"false"`.
 
+## Requirements
+
+- **`git` on the PATH.** Line diffs run `git diff --no-index`. It is preinstalled on GitHub-hosted runners. In a container or on a self-hosted runner, install it. Without it the action still reports sizes and images, skips the line diffs, and warns.
+- **Built output, not source.** Line diffs are for compiled assets (your `dist/`), which are usually not committed or are minified, so the pull request's Files tab can't show them. Review source changes there as usual.
+- **Regular files only.** The trees can come from an untrusted pull request, so symbolic links are never followed (a link could point outside the checkout). They are skipped with a warning.
+
 ## Inputs
 
 | Name                | Required | Default                   | Description                                                                                                                                                                                                                                                            |
@@ -110,6 +116,7 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 | `report-branch`     | no       | `file-diff-reports`       | Branch the HTML report is committed to when `visual-diff` is `branch`. Created as an orphan branch when missing.                                                                                                                                                       |
 | `pages-url`         | no       | —                         | Base URL that serves `report-branch`. Defaults to the repository's GitHub Pages URL.                                                                                                                                                                                   |
 | `max-diff-size`     | no       | `262144`                  | Largest file, in bytes, that gets a line diff. Larger files are listed without one.                                                                                                                                                                                    |
+| `max-diff-lines`    | no       | `20000`                   | Most diff lines kept for the whole report. A diff that would go over is left out of the report, with its line counts kept. `0` leaves out every diff.                                                                                                                  |
 
 ## Outputs
 
@@ -126,10 +133,12 @@ The comment includes a stats line (files added, removed and modified; lines adde
 The visual diff opens with summary cards (total size, files changed, lines, images), then has three parts:
 
 1. **Overview**: base and head size per file, grouped by package, with log-scale bars. File names link to their diff.
-2. **Code**: a diff per changed text file, with a file list, unified or split layout, and word-level highlights. Minified, `.gz` and `.map` siblings are skipped. Binary files and files over `max-diff-size` are listed without a diff.
+2. **Code**: a diff per changed text file, with a file list, unified or split layout, and word-level highlights on the lines that were edited into one another. Minified, `.gz` and `.map` siblings are skipped. Binary files, unreadable files and files over `max-diff-size` are listed without a diff, with the reason. Once the report holds `max-diff-lines` lines, further diffs are left out but keep their +/− counts. Each diff is stored once in the page and its rows are built when the file opens, so a large report stays fast; find-in-page only searches files that are open.
 3. **Visual**: changed images (`png`, `jpg`, `gif`, `svg`, `webp`, `avif`, `ico`, `bmp`), compared side by side, as an overlay with an opacity slider, with a swipe slider (drag the image or use the range control), or as a difference blend. Background (checker, light, dark) and zoom (fit, 1×, 2×, 4×) controls; <kbd>J</kbd>/<kbd>K</kbd> switch images. Only shown when an image changed.
 
 The full page (cards, tabs, split view and image compare modes) needs `visual-diff: branch`. The job summary shows the same data as collapsible sections without the interactive controls.
+
+The pull request comment is shortened to fit GitHub's 65,536-character limit; when rows are left out it says so and links the full report.
 
 ### `visual-diff: summary` (default)
 
@@ -140,7 +149,10 @@ The full page (cards, tabs, split view and image compare modes) needs `visual-di
 ### `visual-diff: branch`
 
 - Commits a self-contained HTML page with tabs to `<report-branch>/pr-<number>/index.html`, plus changed images (up to 5 MB each). The job summary is still written.
+- Each run replaces the branch with a single parentless commit, so older versions of a report don't pile up in the repository's history.
 - When the pull request closes, the action deletes that directory. Add `closed` to the trigger types for this.
+- Overlapping runs are detected and retried. If two land within milliseconds of each other, one report can be overwritten; it comes back on that pull request's next push.
+- If the link in the comment is wrong (a custom domain, or your token can't read the Pages settings), set `pages-url`.
 - If publishing fails (for example, a fork pull request with a read-only token), the action warns and links the job summary instead.
 
 Setup:
@@ -223,7 +235,8 @@ Plain JavaScript, no TypeScript. The source under `src/` is bundled with esbuild
 ```sh
 yarn lint      # eslint (flat config, @eslint/js recommended + prettier)
 yarn format    # prettier --write, then eslint --fix
-yarn test      # jest, JS-only
+yarn test      # jest, JS-only (line diffs need git on the PATH)
+yarn test:browser   # drives the report page in Chrome (CHROME_PATH, or the installed Chrome)
 yarn build     # esbuild -> dist/index.js (committed; CI fails if stale)
 yarn preview   # render the visual diff page from a sample fixture into preview/
 yarn preview --serve   # serve it at http://localhost:4173 with live reload

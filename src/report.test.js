@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { baseExtension, buildFileRow, buildReport, commentMarker, countedSize, filterByExtensions, groupByPackage, isReportedFile, normalizeExtensions, printChange, printPercentChange, resolveMainFile, splitPath, totalSize } from "./report.js";
+import { baseExtension, buildFileRow, buildReport, commentMarker, countedSize, filterByExtensions, fitRows, groupByPackage, isReportedFile, normalizeExtensions, printChange, printPercentChange, resolveMainFile, splitPath, totalSize } from "./report.js";
 
 /** Head/base maps matching the e2e fixture. */
 const HEAD = new Map([
@@ -160,9 +160,9 @@ describe("splitPath and groupByPackage", () => {
 		expect([...packages.keys()]).toEqual(["packages/bar", "packages/foo"]);
 		const bar = packages.get("packages/bar");
 		expect(bar.name).toBe("bar");
-		expect(bar.files.get("index.js")).toEqual({ headByteSize: 5000, baseByteSize: 3000 });
-		expect(bar.files.get("removed.js")).toEqual({ headByteSize: undefined, baseByteSize: 10 });
-		expect(packages.get("packages/foo").files.get("index.min.css.gz")).toEqual({ headByteSize: 20, baseByteSize: undefined });
+		expect(bar.files.get("index.js")).toEqual({ path: "packages/bar/dist/index.js", headByteSize: 5000, baseByteSize: 3000 });
+		expect(bar.files.get("removed.js")).toEqual({ path: "packages/bar/dist/removed.js", headByteSize: undefined, baseByteSize: 10 });
+		expect(packages.get("packages/foo").files.get("index.min.css.gz")).toEqual({ path: "packages/foo/dist/index.min.css.gz", headByteSize: 20, baseByteSize: undefined });
 	});
 
 	it("groups with a custom build dir", () => {
@@ -360,5 +360,57 @@ describe("buildReport", () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("fitRows", () => {
+	it("keeps rows while they fit the budget", () => {
+		const rows = [["aaaa"], ["bbbb"], ["cccc"]];
+		expect(fitRows(rows, Infinity).kept).toHaveLength(3);
+		expect(fitRows(rows, 25).kept).toEqual([["aaaa"], ["bbbb"]]);
+		expect(fitRows(rows, 0).kept).toEqual([]);
+	});
+});
+
+describe("buildReport maxLength", () => {
+	/** `count` files in one package, plus `packages` extra single-file packages. */
+	const many = (count, packages = 0) => {
+		const head = new Map();
+		const base = new Map();
+		for (let i = 0; i < count; i++) {
+			head.set(`packages/big/dist/file${i}.js`, i + 2);
+			base.set(`packages/big/dist/file${i}.js`, i + 1);
+		}
+		for (let p = 0; p < packages; p++) {
+			head.set(`packages/p${p}/dist/index.js`, 20);
+			base.set(`packages/p${p}/dist/index.js`, 10);
+		}
+		return { headMap: head, baseMap: base };
+	};
+
+	it("is unlimited by default", () => {
+		const report = buildReport(many(300));
+		expect(report.omitted).toEqual({ files: 0, packages: 0 });
+		expect(report.text).toContain("file299.js");
+	});
+
+	it("truncates rows and says how many were left out", () => {
+		const full = buildReport(many(1500));
+		expect(full.text.length).toBeGreaterThan(65536);
+		const report = buildReport({ ...many(1500), maxLength: 60000 });
+		expect(report.text.length).toBeLessThanOrEqual(60000);
+		expect(report.omitted.files).toBeGreaterThan(0);
+		expect(report.text).toMatch(/… \d+ more files not shown\./);
+		expect(report.text).toContain("</small>");
+		expect(report.headTotal).toBe(full.headTotal);
+	});
+
+	it("drops whole packages once the budget is spent", () => {
+		const report = buildReport({ ...many(400, 300), maxLength: 20000 });
+		expect(report.text.length).toBeLessThanOrEqual(20000);
+		expect(report.omitted.packages).toBeGreaterThan(0);
+		expect(report.text).toMatch(/… \d+ more packages not shown\./);
+		expect(report.text.match(/<details>/g)).toHaveLength(1);
+		expect(report.text.match(/<\/details>/g)).toHaveLength(1);
 	});
 });

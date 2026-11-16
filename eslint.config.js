@@ -38,6 +38,11 @@ export default defineConfig([
 		files: ["src/*.client.js"],
 		languageOptions: { sourceType: "script", globals: globals.browser },
 	},
+	// Playwright tests pass functions to the page, so they use browser globals as well as Node's.
+	{
+		files: ["test/browser.test.js"],
+		languageOptions: { globals: { ...globals.node, ...globals.browser } },
+	},
 	// Specific to tooling and repository-management scripts.
 	{
 		files: ["scripts/**/*.js"],

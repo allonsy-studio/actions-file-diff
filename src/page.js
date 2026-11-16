@@ -20,14 +20,6 @@ import { bytesToSize } from "./utilities.js";
 const INTRALINE_LIMIT = 1000;
 
 /**
- * @typedef {object} DiffLine
- * @property {"ctx"|"add"|"del"|"meta"} type
- * @property {number} [oldNo]
- * @property {number} [newNo]
- * @property {string} html Escaped line content, with word-level marks.
- */
-
-/**
  * @typedef {object} PageOptions
  * @property {string} title
  * @property {import("./render.js").SizeRow[]} rows
@@ -82,113 +74,158 @@ export function deltaHtml(head, base) {
  * @returns {"added"|"removed"|"modified"|"unchanged"}
  */
 const rowStatus = (head, base, hasBase) => {
-	if (!hasBase) return "added";
+	if (!hasBase) return "unchanged";
 	if (base == null) return "added";
 	if (head == null) return "removed";
 	return head === base ? "unchanged" : "modified";
 };
 
+/** Smallest similarity (0–1) at which a removed and an added line are shown as an edit of one another. */
+const PAIR_THRESHOLD = 0.5;
+
+/** Most removed × added line pairs compared when matching a run of changes. */
+const PAIR_LIMIT = 400;
+
+/** Non-whitespace characters in a string. */
+const solid = (text) => text.replace(/\s+/g, "").length;
+
 /**
- * Word-level highlight for a removed/added line pair.
+ * Word-level comparison of two lines. Similarity is the share of non-whitespace
+ * characters the lines have in common, so indentation can't make unrelated
+ * lines look alike.
  * @param {string} oldText
  * @param {string} newText
- * @returns {[string, string]} Escaped old and new HTML.
+ * @returns {{ similarity: number, old: number[], new: number[] }} Changed ranges as flat `[start, end, …]` offsets.
  */
-export function intraline(oldText, newText) {
-	if (oldText.length > INTRALINE_LIMIT || newText.length > INTRALINE_LIMIT) return [esc(oldText), esc(newText)];
-	let oldHtml = "";
-	let newHtml = "";
+export function compareLines(oldText, newText) {
+	const none = { similarity: 0, old: [], new: [] };
+	if (oldText.length > INTRALINE_LIMIT || newText.length > INTRALINE_LIMIT) return none;
+	const longest = Math.max(1, solid(oldText), solid(newText));
+	// Common characters can't exceed the shorter line, which bounds the similarity cheaply.
+	if (Math.min(solid(oldText), solid(newText)) / longest < PAIR_THRESHOLD) return none;
+
+	const old = [];
+	const next = [];
+	let oldAt = 0;
+	let newAt = 0;
+	let common = 0;
+	const push = (ranges, start, end) => (ranges.length > 0 && ranges.at(-1) === start ? (ranges[ranges.length - 1] = end) : ranges.push(start, end));
+
 	diffWordsWithSpace(oldText, newText).forEach(({ added, removed, value }) => {
-		if (added) newHtml += `<mark>${esc(value)}</mark>`;
-		else if (removed) oldHtml += `<mark>${esc(value)}</mark>`;
-		else {
-			oldHtml += esc(value);
-			newHtml += esc(value);
+		if (added) {
+			push(next, newAt, newAt + value.length);
+			newAt += value.length;
+		} else if (removed) {
+			push(old, oldAt, oldAt + value.length);
+			oldAt += value.length;
+		} else {
+			common += solid(value);
+			oldAt += value.length;
+			newAt += value.length;
 		}
 	});
-	return [oldHtml, newHtml];
+
+	return { similarity: common / longest, old, new: next };
 }
 
 /**
- * Walks hunk lines into typed lines, pairing each run of removals with the
- * following run of additions for word-level highlights.
- * @param {import("./changes.js").Hunk} hunk
- * @returns {{ lines: DiffLine[], pairs: Array<[DiffLine|undefined, DiffLine|undefined]|DiffLine> }}
- *   `lines` in unified order; `pairs` in split order (a DiffLine for context/meta rows).
+ * Matches removed lines to the added lines they were edited into. Chooses the
+ * order-preserving set of pairs with the highest total similarity, so an
+ * inserted or deleted line doesn't shift every pairing after it.
+ * @param {string[]} oldTexts
+ * @param {string[]} newTexts
+ * @returns {Array<{ del: number, add: number, old: number[], new: number[] }>} Indexes into the two arrays.
  */
-export function walkHunk({ oldStart, newStart, lines: raw }) {
-	const lines = [];
-	const pairs = [];
-	let oldNo = oldStart;
-	let newNo = newStart;
-	let i = 0;
+export function pairLines(oldTexts, newTexts) {
+	if (oldTexts.length === 0 || newTexts.length === 0) return [];
 
-	while (i < raw.length) {
-		const sign = raw[i][0];
-		if (sign === "-" || sign === "+") {
-			const dels = [];
-			const adds = [];
-			while (i < raw.length && raw[i][0] === "-") dels.push({ type: "del", oldNo: oldNo++, text: raw[i++].slice(1) });
-			while (i < raw.length && raw[i][0] === "+") adds.push({ type: "add", newNo: newNo++, text: raw[i++].slice(1) });
-			const count = Math.max(dels.length, adds.length);
-			for (let k = 0; k < count; k++) {
-				const del = dels[k];
-				const add = adds[k];
-				if (del && add) [del.html, add.html] = intraline(del.text, add.text);
-				else if (del) del.html = esc(del.text);
-				else add.html = esc(add.text);
-				pairs.push([del, add]);
-			}
-			lines.push(...dels, ...adds);
-		} else if (sign === "\\") {
-			const meta = { type: "meta", html: esc(raw[i++]) };
-			lines.push(meta);
-			pairs.push(meta);
-		} else {
-			const ctx = { type: "ctx", oldNo: oldNo++, newNo: newNo++, html: esc(raw[i++].slice(1)) };
-			lines.push(ctx);
-			pairs.push(ctx);
+	const cells = new Map();
+	const score = (i, j) => {
+		const key = i * newTexts.length + j;
+		if (!cells.has(key)) cells.set(key, compareLines(oldTexts[i], newTexts[j]));
+		return cells.get(key);
+	};
+
+	// Too many combinations to compare all of them: pair line by line instead.
+	if (oldTexts.length * newTexts.length > PAIR_LIMIT) {
+		const pairs = [];
+		for (let k = 0; k < Math.min(oldTexts.length, newTexts.length); k++) {
+			const { similarity, old, new: next } = score(k, k);
+			if (similarity >= PAIR_THRESHOLD) pairs.push({ del: k, add: k, old, new: next });
+		}
+		return pairs;
+	}
+
+	const rows = oldTexts.length + 1;
+	const cols = newTexts.length + 1;
+	const best = Array.from({ length: rows }, () => new Array(cols).fill(0));
+	for (let i = 1; i < rows; i++) {
+		for (let j = 1; j < cols; j++) {
+			const { similarity } = score(i - 1, j - 1);
+			best[i][j] = Math.max(best[i - 1][j], best[i][j - 1], similarity >= PAIR_THRESHOLD ? best[i - 1][j - 1] + similarity : 0);
 		}
 	}
 
-	return { lines, pairs };
+	const pairs = [];
+	for (let i = rows - 1, j = cols - 1; i > 0 && j > 0; ) {
+		const { similarity, old, new: next } = score(i - 1, j - 1);
+		if (similarity >= PAIR_THRESHOLD && best[i][j] === best[i - 1][j - 1] + similarity) {
+			pairs.push({ del: i - 1, add: j - 1, old, new: next });
+			i--;
+			j--;
+		} else if (best[i][j] === best[i - 1][j]) i--;
+		else j--;
+	}
+	return pairs.reverse();
 }
 
 /**
- * Unified and split diff tables for one file.
- * @param {import("./changes.js").Hunk[]} hunks
+ * Hunk data for the browser: the raw lines once, the matched removed/added
+ * pairs, and the changed word ranges. The page builds table rows from this when
+ * a file is opened, which keeps the HTML about as large as the diff itself.
+ * @param {import("./changes.js").Hunk} hunk
+ * @returns {{ h: string, o: number, n: number, l: string[], p: number[][], m: Record<number, number[]> }}
+ *   `p` pairs `[removedLineIndex, addedLineIndex]`; `m` maps a line index to `[start, end, …]` offsets in its text (after the sign).
+ */
+export function hunkData({ oldStart, oldLines, newStart, newLines, lines }) {
+	const p = [];
+	const m = {};
+
+	for (let i = 0; i < lines.length; ) {
+		if (lines[i][0] !== "-" && lines[i][0] !== "+") {
+			i++;
+			continue;
+		}
+		const dels = [];
+		const adds = [];
+		while (lines[i]?.[0] === "-") dels.push(i++);
+		// A "\ No newline" marker can sit between the removed and added lines.
+		if (dels.length > 0 && lines[i]?.[0] === "\\") i++;
+		while (lines[i]?.[0] === "+") adds.push(i++);
+
+		pairLines(
+			dels.map((k) => lines[k].slice(1)),
+			adds.map((k) => lines[k].slice(1)),
+		).forEach((pair) => {
+			p.push([dels[pair.del], adds[pair.add]]);
+			if (pair.old.length) m[dels[pair.del]] = pair.old;
+			if (pair.new.length) m[adds[pair.add]] = pair.new;
+		});
+	}
+
+	return { h: `@@ -${oldStart},${oldLines} +${newStart},${newLines} @@`, o: oldStart, n: newStart, l: lines, p, m };
+}
+
+/**
+ * JSON safe to place inside a `<script>` element.
+ * @param {unknown} value
  * @returns {string}
  */
-export function renderDiff(hunks) {
-	const unified = [];
-	const split = [];
-	const sign = { add: "+", del: "-", ctx: " " };
-
-	hunks.forEach((hunk) => {
-		const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
-		unified.push(`<tr class="hunk"><td colspan="3">${header}</td></tr>`);
-		split.push(`<tr class="hunk"><td colspan="4">${header}</td></tr>`);
-
-		const { lines, pairs } = walkHunk(hunk);
-		lines.forEach((line) => {
-			if (line.type === "meta") return unified.push(`<tr class="meta"><td colspan="3">${line.html}</td></tr>`);
-			unified.push(`<tr class="${line.type}"><td class="ln">${line.oldNo ?? ""}</td><td class="ln">${line.newNo ?? ""}</td><td class="code"><span class="sign">${sign[line.type]}</span>${line.html}</td></tr>`);
-		});
-
-		pairs.forEach((pair) => {
-			if (!Array.isArray(pair)) {
-				if (pair.type === "meta") return split.push(`<tr class="meta"><td colspan="4">${pair.html}</td></tr>`);
-				return split.push(`<tr class="ctx"><td class="ln">${pair.oldNo}</td><td class="code">${pair.html}</td><td class="ln">${pair.newNo}</td><td class="code">${pair.html}</td></tr>`);
-			}
-			const [del, add] = pair;
-			const left = del ? `<td class="ln del">${del.oldNo}</td><td class="code del">${del.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
-			const right = add ? `<td class="ln add">${add.newNo}</td><td class="code add">${add.html}</td>` : '<td class="ln empty"></td><td class="code empty"></td>';
-			split.push(`<tr>${left}${right}</tr>`);
-		});
-	});
-
-	return `<table class="diff unified">${unified.join("")}</table><table class="diff split"><colgroup><col class="ln-col"><col><col class="ln-col"><col></colgroup>${split.join("")}</table>`;
-}
+export const scriptJson = (value) =>
+	JSON.stringify(value)
+		.replace(/</g, "\\u003c")
+		.replace(/\u2028/g, "\\u2028")
+		.replace(/\u2029/g, "\\u2029");
 
 /**
  * Summary cards at the top of the page.
@@ -216,8 +253,12 @@ function renderCards({ hasBase, changes, totals }) {
  * @param {Map<string, string>} anchors Change path → element id.
  * @returns {string}
  */
-function renderOverview({ rows, hasBase }, anchors) {
-	if (rows.length === 0) return '<p class="empty-state">No size changes.</p>';
+function renderOverview({ rows, hasBase, changes }, anchors) {
+	if (rows.length === 0) {
+		const { added, removed, modified } = changes.stats;
+		const files = added + removed + modified;
+		return `<p class="empty-state">No size changes.${files > 0 ? ` ${files} ${files === 1 ? "file differs" : "files differ"} in content only. See the Code tab.` : ""}</p>`;
+	}
 	const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
 	const pct = (v) => `${(barScale(v, max) * 100).toFixed(1)}%`;
 
@@ -230,14 +271,13 @@ function renderOverview({ rows, hasBase }, anchors) {
 
 	const body = [...groups.values()]
 		.map((group) => {
-			const { packageName, packageDir } = group[0];
+			const { packageName } = group[0];
 			const head = group.reduce((sum, r) => sum + (r.headByteSize ?? 0), 0);
 			const base = group.reduce((sum, r) => sum + (r.baseByteSize ?? 0), 0);
 			const header = `<tr class="pkg"><th scope="rowgroup" colspan="2">${esc(packageName)} <span class="muted">${group.length} ${group.length === 1 ? "file" : "files"}</span></th>${hasBase ? `<td class="num">${esc(bytesToSize(base))}</td>` : ""}<td class="num">${esc(bytesToSize(head))}</td>${hasBase ? `<td class="num">${deltaHtml(head, base)}</td>` : ""}<td></td></tr>`;
-			const items = group.map(({ file, headByteSize, baseByteSize }) => {
+			const items = group.map(({ file, path, headByteSize, baseByteSize }) => {
 				const status = rowStatus(headByteSize, baseByteSize, hasBase);
-				const path = packageDir ? [...anchors.keys()].find((p) => p.startsWith(`${packageDir}/`) && p.endsWith(`/${file}`)) : undefined;
-				const name = path ? `<a href="#${anchors.get(path)}">${esc(file)}</a>` : esc(file);
+				const name = anchors.has(path) ? `<a href="#${anchors.get(path)}">${esc(file)}</a>` : esc(file);
 				const bars = `${hasBase ? `<span class="bar base" style="inline-size:${pct(baseByteSize)}"></span>` : ""}<span class="bar head" style="inline-size:${pct(headByteSize)}"></span>`;
 				return `<tr><td><span class="dot ${status}" title="${status}"></span><span class="sr-only">${status}</span></td><td class="file-cell">${name}</td>${hasBase ? `<td class="num">${esc(bytesToSize(baseByteSize))}</td>` : ""}<td class="num">${esc(bytesToSize(headByteSize))}</td>${hasBase ? `<td class="num">${deltaHtml(headByteSize, baseByteSize)}</td>` : ""}<td class="chart" aria-hidden="true">${bars}</td></tr>`;
 			});
@@ -265,8 +305,12 @@ function renderFileList(items, label, buttons = false) {
 	return `<nav class="filelist" aria-label="${esc(label)}"><ul>${entries.join("")}</ul></nav>`;
 }
 
+/** Diff lines shown open on load, so small diffs are visible without a click. */
+const OPEN_LINES = 800;
+
 /**
- * Code panel: file list and per-file diffs with a unified/split toggle.
+ * Code panel: file list and per-file diffs with a unified/split toggle. Each
+ * diff ships as JSON and is turned into rows when its `<details>` opens.
  * @param {PageOptions} options
  * @param {Map<string, string>} anchors
  * @returns {string}
@@ -280,10 +324,20 @@ function renderCode({ changes }, anchors) {
 		"Changed files",
 	);
 
+	let shown = 0;
 	const files = changes.text
-		.map((c) => {
-			const body = c.skipped ? `<p class="note">Line diff skipped: ${esc(c.skipped)}.</p>` : `<div class="diff-scroll">${renderDiff(c.hunks)}</div>`;
-			return `<section class="file" id="${anchors.get(c.file)}"><details open><summary><span class="chev">${ICON.chevron}</span><span class="pill ${c.status}">${c.status}</span><span class="path">${pathHtml(c.file)}</span><span class="meta">${counts(c)}</span></summary>${body}</details></section>`;
+		.map((c, i) => {
+			const size = c.hunks.reduce((sum, hunk) => sum + hunk.lines.length + 1, 0);
+			const open = c.hunks.length > 0 && (i === 0 || shown + size <= OPEN_LINES);
+			if (open) shown += size;
+
+			let body;
+			if (c.skipped) body = `<p class="note">Line diff skipped: ${esc(c.skipped)}.</p>`;
+			else if (c.omitted) body = `<p class="note">Diff left out because ${esc(c.omitted)}. Raise <code>max-diff-lines</code> to include it.</p>`;
+			else if (c.hunks.length === 0) body = '<p class="note">No line changes.</p>';
+			else body = `<div class="diff-scroll"><script type="application/json">${scriptJson(c.hunks.map(hunkData))}</script></div>`;
+
+			return `<section class="file" id="${anchors.get(c.file)}"><details${open ? " open" : ""}><summary><span class="chev">${ICON.chevron}</span><span class="pill ${c.status}">${c.status}</span><span class="path">${pathHtml(c.file)}</span><span class="meta">${counts(c)}</span></summary>${body}</details></section>`;
 		})
 		.join("");
 
@@ -293,6 +347,7 @@ function renderCode({ changes }, anchors) {
 <span class="spacer"></span>
 <button type="button" class="ghost" data-action="collapse">Collapse all</button>
 </div>
+<noscript><p class="note">Diffs are drawn by script. Enable JavaScript to see them.</p></noscript>
 ${files}</div></div>`;
 }
 

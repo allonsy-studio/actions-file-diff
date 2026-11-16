@@ -75,7 +75,8 @@ jobs:
                   comment: "false"
 
             # Expected head total: foo -> 50 (index.min.css stands in for index.css)
-            # + 200 (icon.svg), bar -> 5000 (index.js). .gz files are not counted.
+            # + 200 (icon.svg), bar -> 5000 (index.js). .gz files are not counted,
+            # and neither is the symlink to a file outside the tree (700 bytes if followed).
             - name: Assert outputs
               env:
                   CHANGED_HAS_CHANGED: ${{ steps.changed.outputs.has-changed }}

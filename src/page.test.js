@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { MAX_IMAGE_SIZE } from "./changes.js";
-import { deltaHtml, intraline, renderDiff, renderHtml, reportFiles, walkHunk } from "./page.js";
+import { compareLines, deltaHtml, hunkData, pairLines, renderHtml, reportFiles, scriptJson } from "./page.js";
 
 const stats = { added: 1, removed: 1, modified: 1, additions: 3, deletions: 1 };
 const totals = { headTotal: 2048, baseTotal: 1024 };
@@ -11,12 +11,15 @@ const totals = { headTotal: 2048, baseTotal: 1024 };
 const hunk = { oldStart: 1, oldLines: 3, newStart: 1, newLines: 3, lines: [" keep", "-color: red;", "+color: blue;", "+extra", "\\ No newline at end of file"] };
 const change = (file, extra = {}) => ({ file, status: "modified", additions: 2, deletions: 1, hunks: [hunk], ...extra });
 
-const rows = [
-	{ packageName: "foo", packageDir: "packages/foo", file: "a.css", headByteSize: 200, baseByteSize: 100 },
-	{ packageName: "foo", packageDir: "packages/foo", file: "b.css", headByteSize: undefined, baseByteSize: 50 },
-	{ packageName: "foo", packageDir: "packages/foo", file: "c.css", headByteSize: 10, baseByteSize: 10 },
-	{ packageName: "bar", packageDir: "packages/bar", file: "new.js", headByteSize: 5, baseByteSize: undefined },
-];
+const row = (file, extra = {}) => ({ packageName: "foo", packageDir: "packages/foo", file, path: `packages/foo/dist/${file}`, headByteSize: 10, baseByteSize: 5, ...extra });
+const rows = [row("a.css", { headByteSize: 200, baseByteSize: 100 }), row("b.css", { headByteSize: undefined, baseByteSize: 50 }), row("c.css", { baseByteSize: 10 }), row("new.js", { packageName: "bar", packageDir: "packages/bar", path: "packages/bar/dist/new.js", baseByteSize: undefined })];
+
+/** Parses the JSON payload embedded for a file. */
+const payload = (html, id) => {
+	const section = html.slice(html.indexOf(`id="${id}"`));
+	const match = /<script type="application\/json">(.*?)<\/script>/s.exec(section);
+	return JSON.parse(match[1]);
+};
 
 describe("deltaHtml", () => {
 	it("colors growth, shrinkage and no change", () => {
@@ -27,41 +30,77 @@ describe("deltaHtml", () => {
 	});
 });
 
-describe("intraline", () => {
-	it("marks only the changed words", () => {
-		expect(intraline("color: red;", "color: blue;")).toEqual(["color: <mark>red</mark>;", "color: <mark>blue</mark>;"]);
+describe("compareLines", () => {
+	it("returns the changed word ranges and a similarity", () => {
+		const result = compareLines("color: red;", "color: blue;");
+		expect(result.old).toEqual([7, 10]);
+		expect(result.new).toEqual([7, 11]);
+		expect(result.similarity).toBeGreaterThan(0.5);
 	});
 
-	it("escapes and skips very long lines", () => {
-		const long = "<".repeat(1001);
-		expect(intraline(long, "x")).toEqual(["&lt;".repeat(1001), "x"]);
+	it("ignores indentation when judging similarity", () => {
+		expect(compareLines("        foo(1);", "        bar(2);").similarity).toBeLessThan(0.5);
+	});
+
+	it("gives up on unrelated and very long lines", () => {
+		expect(compareLines("aaaaaaaaaa", "b")).toEqual({ similarity: 0, old: [], new: [] });
+		expect(compareLines("x".repeat(1001), "x".repeat(1001)).similarity).toBe(0);
 	});
 });
 
-describe("walkHunk", () => {
-	it("numbers lines and pairs removals with additions", () => {
-		const { lines, pairs } = walkHunk(hunk);
-		expect(lines.map(({ type, oldNo, newNo }) => [type, oldNo, newNo])).toEqual([
-			["ctx", 1, 1],
-			["del", 2, undefined],
-			["add", undefined, 2],
-			["add", undefined, 3],
-			["meta", undefined, undefined],
+describe("pairLines", () => {
+	it("pairs the edited lines, not the first two", () => {
+		const pairs = pairLines([".a{color:red}", ".b{color:blue}"], [".b{color:green}", ".c{margin:0}"]);
+		expect(pairs.map(({ del, add }) => [del, add])).toEqual([[1, 0]]);
+	});
+
+	it("keeps pairs in order and skips unrelated lines", () => {
+		const pairs = pairLines(["alpha = 1;", "beta = 2;", "gamma = 3;"], ["alpha = 10;", "unrelated stuff here", "gamma = 30;"]);
+		expect(pairs.map(({ del, add }) => [del, add])).toEqual([
+			[0, 0],
+			[2, 2],
 		]);
-		expect(pairs[1][0].html).toContain("<mark>");
-		expect(pairs[2][0]).toBeUndefined();
-		expect(pairs[2][1].html).toBe("extra");
+	});
+
+	it("handles empty sides and falls back to line-by-line pairs for big runs", () => {
+		expect(pairLines([], ["x"])).toEqual([]);
+		expect(pairLines(["x"], [])).toEqual([]);
+		const many = Array.from({ length: 30 }, (_, i) => `value${i} = ${i};`);
+		const pairs = pairLines(
+			many,
+			many.map((l) => l.replace("= ", "= 1")),
+		);
+		expect(pairs).toHaveLength(30);
+		expect(pairs.every(({ del, add }) => del === add)).toBe(true);
 	});
 });
 
-describe("renderDiff", () => {
-	it("renders unified and split tables", () => {
-		const html = renderDiff([hunk]);
-		expect(html).toContain('<table class="diff unified">');
-		expect(html).toContain('<table class="diff split">');
-		expect(html).toContain("@@ -1,3 +1,3 @@");
-		expect(html).toContain('<td class="ln empty"></td>');
-		expect(html).toContain("\\ No newline at end of file");
+describe("hunkData", () => {
+	it("embeds the raw lines once with pairs and marks", () => {
+		const data = hunkData(hunk);
+		expect(data).toMatchObject({ h: "@@ -1,3 +1,3 @@", o: 1, n: 1, l: hunk.lines, p: [[1, 2]] });
+		expect(data.m[1]).toEqual([7, 10]);
+		expect(data.m[2]).toEqual([7, 11]);
+		expect(data.m[3]).toBeUndefined();
+	});
+
+	it("pairs across a no-newline marker between the removed and added lines", () => {
+		const data = hunkData({ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-const x = 1", "\\ No newline at end of file", "+const x = 2"] });
+		expect(data.p).toEqual([[0, 2]]);
+	});
+
+	it("has no pairs for context-only or one-sided changes", () => {
+		expect(hunkData({ oldStart: 1, oldLines: 2, newStart: 1, newLines: 2, lines: [" a", " b"] }).p).toEqual([]);
+		expect(hunkData({ oldStart: 0, oldLines: 0, newStart: 1, newLines: 2, lines: ["+a", "+b"] })).toMatchObject({ p: [], m: {} });
+	});
+});
+
+describe("scriptJson", () => {
+	it("cannot close the script element or break a line", () => {
+		const text = scriptJson({ x: "</script><!--  " });
+		expect(text).not.toContain("</script>");
+		expect(text).not.toContain(" ");
+		expect(JSON.parse(text).x).toBe("</script><!--  ");
 	});
 });
 
@@ -77,9 +116,38 @@ describe("renderHtml", () => {
 		expect(html).not.toContain("<x>.bin");
 		expect(html).toContain("Line diff skipped: binary file.");
 		expect(html).toContain("o/r#1");
-		expect(html).toContain('<a href="#f-0">a.css</a>');
-		expect(html).toContain('class="dot unchanged"');
 		expect(html).toContain('<span class="chip added">1 added</span>');
+		expect(html).toContain("<noscript>");
+	});
+
+	it("links overview rows to their own diff by exact path", () => {
+		// `index.js` is unchanged; only `sub/index.js` has a diff. The suffix match used to link both to it.
+		const exact = [row("index.js", { path: "packages/foo/dist/index.js", headByteSize: 5, baseByteSize: 5 }), row("sub/index.js", { path: "packages/foo/dist/sub/index.js" })];
+		const html = renderHtml({ title: "Report", rows: exact, hasBase: true, changes: { stats, text: [change("packages/foo/dist/sub/index.js")], images: [] }, totals });
+		const cells = [...html.matchAll(/<td class="file-cell">(.*?)<\/td>/g)].map((m) => m[1]);
+		expect(cells).toEqual(["index.js", '<a href="#f-0">sub/index.js</a>']);
+	});
+
+	it("ships each diff once as JSON and opens only what is small", () => {
+		const big = change("packages/foo/dist/big.js", { hunks: [{ oldStart: 1, oldLines: 900, newStart: 1, newLines: 900, lines: Array.from({ length: 900 }, (_, i) => `+line ${i}`) }] });
+		const html = renderHtml({ title: "Report", rows, hasBase: true, changes: { stats, text: [change("packages/foo/dist/a.css"), big, change("packages/foo/dist/c.css")], images: [] }, totals });
+		expect(payload(html, "f-0")[0]).toMatchObject({ h: "@@ -1,3 +1,3 @@", p: [[1, 2]] });
+		// The first file and the small third one open; the 900-line second one stays closed.
+		expect(html.match(/<details open>/g)).toHaveLength(2);
+		expect(html.match(/<details>/g)).toHaveLength(1);
+		// No diff rows are written into the markup; the script builds them when a file opens.
+		const markup = html.replace(/<script[\s\S]*?<\/script>/g, "");
+		expect(markup).not.toContain('<table class="diff');
+		expect(markup).not.toContain('<tr class="add">');
+	});
+
+	it("explains diffs that were left out and keeps their line counts", () => {
+		const omitted = change("packages/foo/dist/a.css", { omitted: "the report's diff budget (10 lines) is used up", hunks: [], additions: 7, deletions: 4 });
+		const html = renderHtml({ title: "Report", rows, hasBase: true, changes: { stats, text: [omitted], images: [] }, totals });
+		expect(html).toContain("Diff left out because the report&#39;s diff budget (10 lines) is used up.");
+		expect(html).toContain("<code>max-diff-lines</code>");
+		expect(html).toContain('<span class="add">+7</span> <span class="del">−4</span>');
+		expect(html).not.toContain('application/json">[');
 	});
 
 	it("adds the visual tab with compare controls and image URLs", () => {
@@ -109,6 +177,17 @@ describe("renderHtml", () => {
 		expect(html).toContain("No base to compare");
 		expect(html).toContain("No size changes.");
 		expect(html).toContain("No text changes.");
+	});
+
+	it("points content-only changes to the Code tab", () => {
+		const html = renderHtml({ title: "Report", rows: [], hasBase: true, changes: { stats, text: [change("packages/foo/dist/a.css")], images: [] }, totals });
+		expect(html).toContain("3 files differ in content only. See the Code tab.");
+	});
+
+	it("shows neutral status dots when there is no base", () => {
+		const html = renderHtml({ title: "Report", rows, hasBase: false, changes, totals });
+		expect(html).toContain('class="dot unchanged"');
+		expect(html).not.toContain('class="dot added"');
 	});
 });
 

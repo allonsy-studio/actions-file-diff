@@ -123,6 +123,9 @@ export function debounce(fn, wait = 100) {
 			),
 			"packages/core/dist/vendor.js": "export const data = [\n" + '\t"base-row",\n'.repeat(30000) + "];\n",
 			"packages/core/dist/font.woff2": Buffer.from([0x77, 0x4f, 0x46, 0x32, 0, 1, 2, 3, 4]),
+			"packages/core/dist/rules.css": ".a{color:red}\n.b{color:blue}\n.shared{margin:0}\n",
+			"packages/core/dist/medium.js": Array.from({ length: 450 }, (_, i) => `export const m${i} = "base-${i}";`).join("\n") + "\n",
+			"packages/core/dist/zz-large.js": Array.from({ length: 1500 }, (_, i) => `export const v${i} = ${i};`).join("\n") + "\n",
 			"packages/legacy/package.json": JSON.stringify({ name: "legacy", main: "dist/old.js" }),
 			"packages/legacy/dist/old.js": "export const legacy = true;\n",
 			"packages/legacy/dist/badge.png": png(96, 96, circle([207, 34, 46], 30)),
@@ -153,6 +156,12 @@ export const noop = () => {};
 			"packages/core/dist/vendor.js": "export const data = [\n" + '\t"head-row",\n'.repeat(32000) + "];\n",
 			"packages/core/dist/font.woff2": Buffer.from([0x77, 0x4f, 0x46, 0x32, 0, 9, 8, 7, 6, 5]),
 			"packages/core/dist/hero.png": png(96, 96, circle([26, 127, 55], 40)),
+			// `.b` was edited, `.a` removed and `.c` added: the split view pairs the two `.b` lines.
+			"packages/core/dist/rules.css": ".b{color:green}\n.c{margin:0}\n.shared{margin:0}\n",
+			// Long enough to start closed on the Code tab, yet inside the preview's diff budget.
+			"packages/core/dist/medium.js": Array.from({ length: 450 }, (_, i) => `export const m${i} = "head-${i}";`).join("\n") + "\n",
+			// Sorts last in the package and is long enough to use up the preview's diff budget.
+			"packages/core/dist/zz-large.js": Array.from({ length: 1500 }, (_, i) => `export const v${i} = ${i * 2};`).join("\n") + "\n",
 			"packages/tokens/package.json": JSON.stringify({ name: "tokens", main: "dist/tokens.css" }),
 			"packages/tokens/dist/tokens.css": ":root {\n\t--accent: #0969da;\n\t--radius: 6px;\n\t--space-1: 0.25rem;\n\t--space-2: 0.5rem;\n}\n",
 		},

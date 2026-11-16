@@ -6,10 +6,9 @@
  * of the License at <http://www.apache.org/licenses/LICENSE-2.0>
  */
 
-import { statSync, existsSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { getOctokit, context } from "@actions/github";
 import { create } from "@actions/glob";
 
 /**
@@ -56,8 +55,12 @@ export function globPatterns(rootPath, patterns = []) {
 		.map((pattern) => (pattern.startsWith("!") ? `!${join(rootPath, pattern.slice(1))}` : join(rootPath, pattern)));
 }
 
+/** Units above bytes; sub-KB sizes are shown in KB too. */
+const UNITS = ["KB", "MB", "GB", "TB"];
+
 /**
- * Formats a byte count as a human readable size using 1024-based units.
+ * Formats a byte count as a human readable size using 1024-based units. The
+ * unit is chosen after rounding, so 1,048,575 bytes reads "1.00 MB", not "1024.00 KB".
  * @param {number|undefined|null} bytes
  * @returns {string}
  */
@@ -65,53 +68,45 @@ export function bytesToSize(bytes) {
 	if (bytes === 0) return "0";
 	if (!bytes) return "-";
 
-	const sizes = ["bytes", "KB", "MB", "GB", "TB"];
-	const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+	let value = bytes / 1024;
+	if (bytes < 1024) return value.toFixed(2) === "0.00" ? "< 0.01 KB" : `${value.toFixed(2)} KB`;
 
-	if (i === 0) {
-		const value = (bytes / 1024).toFixed(2);
-		if (value === "0.00") return "< 0.01 KB";
-		return `${value} ${sizes[1]}`;
+	let unit = 0;
+	while (unit < UNITS.length - 1 && Number(value.toFixed(2)) >= 1024) {
+		value /= 1024;
+		unit++;
 	}
-
-	return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+	return `${value.toFixed(2)} ${UNITS[unit]}`;
 }
 
 /**
- * Creates or updates the sticky pull request comment. The existing comment is
- * found by the marker at the start of its body, regardless of author.
- * @param {object} options
- * @param {string} options.marker Hidden HTML marker the body starts with.
- * @param {string} options.content Full comment body (including the marker).
- * @param {string} options.token GitHub token.
- * @param {{ info?: Function }} [options.core]
- * @returns {Promise<object|undefined>} The API response, or undefined outside a pull request.
+ * Maps over items with at most `limit` calls in flight, preserving order.
+ * @template T, R
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T, index: number) => Promise<R>} fn
+ * @returns {Promise<R[]>}
  */
-export async function addComment({ marker, content, token, core }) {
-	const pullRequest = context.payload.pull_request;
-	if (!pullRequest) {
-		core?.info?.("Not running on a pull request; skipping the comment.");
-		return;
-	}
-
-	const octokit = getOctokit(token);
-	const { owner, repo } = context.repo;
-	const issue_number = pullRequest.number;
-
-	const comments = (await octokit.paginate(octokit.rest.issues.listComments, { owner, repo, issue_number })) ?? [];
-	const existingComment = [...comments].reverse().find((comment) => typeof comment?.body === "string" && comment.body.startsWith(marker));
-
-	if (existingComment) {
-		return octokit.rest.issues.updateComment({ owner, repo, comment_id: existingComment.id, body: content });
-	}
-
-	return octokit.rest.issues.createComment({ owner, repo, issue_number, body: content });
+export async function mapLimit(items, limit, fn) {
+	const results = new Array(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const index = next++;
+			results[index] = await fn(items[index], index);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+	return results;
 }
 
 /**
  * Globs a root path and returns a map of relative file path → size in bytes.
- * A required root must exist and match at least one file (otherwise throws);
- * an optional root that is missing or unmatched yields an empty map.
+ * Only regular files are returned: symbolic links are never followed, because
+ * the tree may come from an untrusted pull request and a link could point at
+ * files outside the checkout. A required root must exist and match at least
+ * one file (otherwise throws); an optional root that is missing or unmatched
+ * yields an empty map.
  * @param {string} rootPath
  * @param {string[]} [patterns]
  * @param {{ core: object, required?: boolean }} options
@@ -123,19 +118,24 @@ export async function fetchFilesAndSizes(rootPath, patterns = [], { core, requir
 		return new Map();
 	}
 
-	const globber = await create(globPatterns(rootPath, patterns).join("\n"), { matchDirectories: false });
-	const files = (await globber.glob()).filter((f) => {
-		const stat = statSync(f, { throwIfNoEntry: false });
-		return stat && stat.isFile();
-	});
+	const globber = await create(globPatterns(rootPath, patterns).join("\n"), { matchDirectories: false, followSymbolicLinks: false });
 
-	if (files.length === 0) {
+	const files = new Map();
+	let links = 0;
+	(await globber.glob()).forEach((f) => {
+		const stat = lstatSync(f, { throwIfNoEntry: false });
+		if (stat?.isFile()) files.set(relative(rootPath, f), stat.size);
+		else if (stat?.isSymbolicLink()) links++;
+	});
+	if (links > 0) core.warning(`From ${rootPath}, ignored ${links} symbolic link${links === 1 ? "" : "s"}; only regular files are measured.`);
+
+	if (files.size === 0) {
 		if (required) debugEmptyDirectory(rootPath, patterns, { core });
 		core.warning(`From ${rootPath}, no files matched the glob pattern ${patterns.join(", ")}; continuing without a base.`);
 		return new Map();
 	}
 
-	core.info(`From ${rootPath}, found ${files.length} files matching the glob pattern ${patterns.join(", ")}.`);
+	core.info(`From ${rootPath}, found ${files.size} files matching the glob pattern ${patterns.join(", ")}.`);
 
-	return new Map(files.map((f) => [relative(rootPath, f), statSync(f).size]));
+	return files;
 }

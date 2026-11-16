@@ -19,6 +19,17 @@
 		},
 	};
 
+	const code = $(".code-main");
+
+	/** Index an arrow, Home or End key moves to in a horizontal list, or undefined for other keys. */
+	function targetIndex(key, i, length, rtl) {
+		const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[key];
+		if (step) return (i + step + length) % length;
+		if (key === "Home") return 0;
+		if (key === "End") return length - 1;
+		return undefined;
+	}
+
 	/* ---- Tabs: selection follows focus, roving tabindex ------------------ */
 	const tablist = $('[role="tablist"]');
 	const tabs = $$('[role="tab"]', tablist);
@@ -44,15 +55,10 @@
 	});
 	tablist.addEventListener("keydown", (e) => {
 		const i = tabs.indexOf(document.activeElement);
-		const rtl = getComputedStyle(tablist).direction === "rtl";
-		const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];
-		let next;
-		if (step) next = tabs[(i + step + tabs.length) % tabs.length];
-		else if (e.key === "Home") next = tabs[0];
-		else if (e.key === "End") next = tabs.at(-1);
-		if (!next || i < 0) return;
+		const next = i < 0 ? undefined : targetIndex(e.key, i, tabs.length, getComputedStyle(tablist).direction === "rtl");
+		if (next === undefined) return;
 		e.preventDefault();
-		selectTab(next, { focus: true });
+		selectTab(tabs[next], { focus: true });
 	});
 	// Find-in-page revealed a hidden panel: select its tab.
 	$$('[role="tabpanel"]').forEach((panel) =>
@@ -68,7 +74,10 @@
 		const tab = panel && document.getElementById(panel.getAttribute("aria-labelledby"));
 		if (tab && tab.getAttribute("aria-selected") !== "true") selectTab(tab, { push: false });
 		const details = el.querySelector("details");
-		if (details) details.open = true;
+		if (details) {
+			details.open = true;
+			renderFile(el);
+		}
 		el.scrollIntoView({ block: "start" });
 	}
 
@@ -82,11 +91,6 @@
 		history.replaceState(null, "", link.hash);
 	});
 
-	const initial = location.hash.slice(1);
-	const initialTab = document.getElementById(`tab-${initial}`);
-	if (initialTab) selectTab(initialTab, { push: false });
-	else if (initial && document.getElementById(initial)) reveal(document.getElementById(initial));
-
 	/* ---- Toolbars: one tab stop, arrow keys move (focusgroup fallback) --- */
 	$$('[role="toolbar"]').forEach((bar) => {
 		if ("focusGroup" in HTMLElement.prototype) return bar.setAttribute("focusgroup", "toolbar wrap");
@@ -98,16 +102,10 @@
 		bar.addEventListener("keydown", (e) => {
 			const list = items();
 			const i = list.indexOf(document.activeElement);
-			if (i < 0) return;
-			const rtl = getComputedStyle(bar).direction === "rtl";
-			const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];
-			let next;
-			if (step) next = list[(i + step + list.length) % list.length];
-			else if (e.key === "Home") next = list[0];
-			else if (e.key === "End") next = list.at(-1);
-			if (!next) return;
+			const next = i < 0 ? undefined : targetIndex(e.key, i, list.length, getComputedStyle(bar).direction === "rtl");
+			if (next === undefined) return;
 			e.preventDefault();
-			next.focus();
+			list[next].focus();
 		});
 	});
 
@@ -116,26 +114,145 @@
 		$$("button", group).forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
 	}
 
-	/* ---- Code: unified/split and collapse -------------------------------- */
-	const code = $(".code-main");
+	/* ---- Code: rows are built from JSON when a file opens ----------------- */
+	const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+	const esc = (text) => text.replace(/[&<>"']/g, (c) => ESCAPES[c]);
+
+	/** Escapes a line, wrapping the changed `[start, end, …]` ranges in <mark>. */
+	function markup(text, ranges) {
+		if (!ranges) return esc(text);
+		let out = "";
+		let at = 0;
+		for (let k = 0; k < ranges.length; k += 2) {
+			out += `${esc(text.slice(at, ranges[k]))}<mark>${esc(text.slice(ranges[k], ranges[k + 1]))}</mark>`;
+			at = ranges[k + 1];
+		}
+		return out + esc(text.slice(at));
+	}
+
+	/** Old and new line numbers for every line of a hunk (null where a side has none). */
+	function numbers({ o, n, l }) {
+		let oldNo = o;
+		let newNo = n;
+		return l.map((line) => (line[0] === "-" ? [oldNo++, null] : line[0] === "+" ? [null, newNo++] : line[0] === "\\" ? [null, null] : [oldNo++, newNo++]));
+	}
+
+	const metaRow = (line, cols) => `<tr class="meta"><td colspan="${cols}">${esc(line)}</td></tr>`;
+
+	function unifiedRows(hunk) {
+		const nos = numbers(hunk);
+		const rows = [`<tr class="hunk"><td colspan="3">${esc(hunk.h)}</td></tr>`];
+		hunk.l.forEach((line, i) => {
+			const sign = line[0];
+			if (sign === "\\") return rows.push(metaRow(line, 3));
+			const kind = sign === "-" ? "del" : sign === "+" ? "add" : "ctx";
+			rows.push(`<tr class="${kind}"><td class="ln">${nos[i][0] ?? ""}</td><td class="ln">${nos[i][1] ?? ""}</td><td class="code"><span class="sign">${sign}</span>${markup(line.slice(1), hunk.m[i])}</td></tr>`);
+		});
+		return rows;
+	}
+
+	const EMPTY_CELLS = '<td class="ln empty"></td><td class="code empty"></td>';
+
+	/** Side-by-side rows. Edited line pairs share a row; other changes fill the gaps between them. */
+	function splitRows(hunk) {
+		const nos = numbers(hunk);
+		const pairOf = new Map(hunk.p);
+		const cells = (i, kind, no) => (i < 0 ? EMPTY_CELLS : `<td class="ln ${kind}">${no}</td><td class="code ${kind}">${markup(hunk.l[i].slice(1), hunk.m[i])}</td>`);
+		const rows = [`<tr class="hunk"><td colspan="4">${esc(hunk.h)}</td></tr>`];
+
+		for (let i = 0; i < hunk.l.length; ) {
+			const sign = hunk.l[i][0];
+			if (sign === "\\") {
+				rows.push(metaRow(hunk.l[i++], 4));
+			} else if (sign !== "-" && sign !== "+") {
+				const text = markup(hunk.l[i].slice(1));
+				rows.push(`<tr class="ctx"><td class="ln">${nos[i][0]}</td><td class="code">${text}</td><td class="ln">${nos[i][1]}</td><td class="code">${text}</td></tr>`);
+				i++;
+			} else {
+				const dels = [];
+				const adds = [];
+				const notes = [];
+				while (hunk.l[i]?.[0] === "-") dels.push(i++);
+				while (hunk.l[i]?.[0] === "\\") notes.push(i++);
+				while (hunk.l[i]?.[0] === "+") adds.push(i++);
+
+				const pairs = [];
+				let di = 0;
+				let ai = 0;
+				const fill = (dEnd, aEnd) => {
+					for (let k = 0, n = Math.max(dEnd - di, aEnd - ai); k < n; k++) pairs.push([di + k < dEnd ? dels[di + k] : -1, ai + k < aEnd ? adds[ai + k] : -1]);
+					di = dEnd;
+					ai = aEnd;
+				};
+				dels.forEach((d, dPos) => {
+					const aPos = adds.indexOf(pairOf.get(d));
+					if (aPos < ai) return;
+					fill(dPos, aPos);
+					pairs.push([d, adds[aPos]]);
+					di = dPos + 1;
+					ai = aPos + 1;
+				});
+				fill(dels.length, adds.length);
+
+				pairs.forEach(([d, a]) => rows.push(`<tr>${cells(d, "del", nos[d]?.[0])}${cells(a, "add", nos[a]?.[1])}</tr>`));
+				notes.forEach((n) => rows.push(metaRow(hunk.l[n], 4)));
+			}
+		}
+		return rows;
+	}
+
+	const parsed = new WeakMap();
+
+	/** Builds a file's diff table for the current layout, once per layout. */
+	function renderFile(section) {
+		const scroll = section && $(".diff-scroll", section);
+		if (!scroll || !code) return;
+		const view = code.dataset.view;
+		if (scroll.dataset.view === view) return;
+		if (!parsed.has(scroll)) parsed.set(scroll, JSON.parse($('script[type="application/json"]', scroll).textContent));
+		const rows = parsed.get(scroll).flatMap((hunk) => (view === "split" ? splitRows(hunk) : unifiedRows(hunk)));
+		const table = view === "split" ? `<table class="diff split"><colgroup><col class="ln-col"><col><col class="ln-col"><col></colgroup>${rows.join("")}</table>` : `<table class="diff unified">${rows.join("")}</table>`;
+		$(".rendered", scroll)?.remove();
+		scroll.insertAdjacentHTML("beforeend", `<div class="rendered">${table}</div>`);
+		scroll.dataset.view = view;
+	}
+
 	if (code) {
+		const sections = $$(".file", code);
+		const renderOpen = () => sections.filter((section) => $("details", section).open).forEach(renderFile);
+		const layout = $('[aria-label="Diff layout"]', code);
+		const collapse = $('[data-action="collapse"]', code);
+		const syncCollapse = () => (collapse.textContent = sections.every((section) => $("details", section).open) ? "Collapse all" : "Expand all");
+
 		const setView = (view) => {
 			code.dataset.view = view;
-			press($('[aria-label="Diff layout"]', code), $(`button[data-view="${view}"]`, code));
+			press(layout, $(`button[data-view="${view}"]`, code));
+			renderOpen();
 		};
-		setView(store.get("view") === "split" ? "split" : "unified");
-		$('[aria-label="Diff layout"]', code).addEventListener("click", (e) => {
+
+		layout.addEventListener("click", (e) => {
 			const b = e.target.closest("button[data-view]");
 			if (!b) return;
 			setView(b.dataset.view);
 			store.set("view", b.dataset.view);
 		});
-		const collapse = $('[data-action="collapse"]', code);
 		collapse.addEventListener("click", () => {
 			const open = collapse.textContent.startsWith("Expand");
-			$$(".file details", code).forEach((d) => (d.open = open));
-			collapse.textContent = open ? "Collapse all" : "Expand all";
+			sections.forEach((section) => ($("details", section).open = open));
+			syncCollapse();
 		});
+		// `toggle` doesn't bubble, so listen while it travels down.
+		code.addEventListener(
+			"toggle",
+			(e) => {
+				if (e.target.open) renderFile(e.target.closest(".file"));
+				syncCollapse();
+			},
+			true,
+		);
+
+		setView(store.get("view") === "split" ? "split" : "unified");
+		syncCollapse();
 	}
 
 	/* ---- Visual: modes, sliders, swipe drag, zoom, pager ----------------- */
@@ -165,6 +282,8 @@
 				const pad = parseFloat(getComputedStyle(stage).paddingLeft) * 2;
 				const columns = viewer.dataset.mode === "side" && !item.hasAttribute("data-single") ? 2 : 1;
 				const width = (stage.clientWidth - pad - (columns - 1) * 16) / columns;
+				// The stage has no size while its tab is hidden; the ResizeObserver reruns this once it shows.
+				if (width <= 0) return;
 				const maxW = Math.max(...imgs.map((img) => img.naturalWidth));
 				const maxH = Math.max(...imgs.map((img) => img.naturalHeight));
 				scale = Math.min(width / maxW, FIT_HEIGHT / maxH);
@@ -255,7 +374,8 @@
 				layers.setPointerCapture(e.pointerId);
 				move(e);
 				layers.addEventListener("pointermove", move);
-				layers.addEventListener("pointerup", () => layers.removeEventListener("pointermove", move), { once: true });
+				// Fires after pointerup and pointercancel alike, so the listener never outlives the drag.
+				layers.addEventListener("lostpointercapture", () => layers.removeEventListener("pointermove", move), { once: true });
 			});
 		});
 
@@ -269,4 +389,10 @@
 
 		show(0);
 	}
+
+	/* ---- Open the tab or file named in the URL ---------------------------- */
+	const initial = location.hash.slice(1);
+	const initialTab = document.getElementById(`tab-${initial}`);
+	if (initialTab) selectTab(initialTab, { push: false });
+	else if (initial && document.getElementById(initial)) reveal(document.getElementById(initial));
 })();
