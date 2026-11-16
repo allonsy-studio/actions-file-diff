@@ -19651,6 +19651,9 @@ var require_dist = __commonJS({
   }
 });
 
+// src/index.js
+var import_node_fs4 = require("node:fs");
+
 // node_modules/@actions/core/lib/core.js
 var core_exports = {};
 __export(core_exports, {
@@ -21923,10 +21926,6 @@ function getIDToken(aud) {
     return yield OidcClient.getIDToken(aud);
   });
 }
-
-// src/utilities.js
-var import_node_fs = require("node:fs");
-var import_node_path = require("node:path");
 
 // node_modules/@actions/github/lib/context.js
 var import_fs2 = require("fs");
@@ -25673,6 +25672,386 @@ function getOctokit(token, options, ...additionalPlugins) {
   return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 
+// src/changes.js
+var import_node_fs3 = require("node:fs");
+var import_node_path3 = require("node:path");
+
+// node_modules/diff/libesm/diff/base.js
+var Diff = class {
+  diff(oldStr, newStr, options = {}) {
+    let callback;
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    } else if ("callback" in options) {
+      callback = options.callback;
+    }
+    const oldString = this.castInput(oldStr, options);
+    const newString = this.castInput(newStr, options);
+    const oldTokens = this.removeEmpty(this.tokenize(oldString, options));
+    const newTokens = this.removeEmpty(this.tokenize(newString, options));
+    return this.diffWithOptionsObj(oldTokens, newTokens, options, callback);
+  }
+  diffWithOptionsObj(oldTokens, newTokens, options, callback) {
+    var _a2;
+    const done = (value) => {
+      value = this.postProcess(value, options);
+      if (callback) {
+        setTimeout(function() {
+          callback(value);
+        }, 0);
+        return void 0;
+      } else {
+        return value;
+      }
+    };
+    const newLen = newTokens.length, oldLen = oldTokens.length;
+    let editLength = 1;
+    let maxEditLength = newLen + oldLen;
+    if (options.maxEditLength != null) {
+      maxEditLength = Math.min(maxEditLength, options.maxEditLength);
+    }
+    const maxExecutionTime = (_a2 = options.timeout) !== null && _a2 !== void 0 ? _a2 : Infinity;
+    const abortAfterTimestamp = Date.now() + maxExecutionTime;
+    const bestPath = [{ oldPos: -1, lastComponent: void 0 }];
+    let newPos = this.extractCommon(bestPath[0], newTokens, oldTokens, 0, options);
+    if (bestPath[0].oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+      return done(this.buildValues(bestPath[0].lastComponent, newTokens, oldTokens));
+    }
+    let minDiagonalToConsider = -Infinity, maxDiagonalToConsider = Infinity;
+    const execEditLength = () => {
+      for (let diagonalPath = Math.max(minDiagonalToConsider, -editLength); diagonalPath <= Math.min(maxDiagonalToConsider, editLength); diagonalPath += 2) {
+        let basePath;
+        const removePath = bestPath[diagonalPath - 1], addPath2 = bestPath[diagonalPath + 1];
+        if (removePath) {
+          bestPath[diagonalPath - 1] = void 0;
+        }
+        let canAdd = false;
+        if (addPath2) {
+          const addPathNewPos = addPath2.oldPos - diagonalPath;
+          canAdd = addPath2 && 0 <= addPathNewPos && addPathNewPos < newLen;
+        }
+        const canRemove = removePath && removePath.oldPos + 1 < oldLen;
+        if (!canAdd && !canRemove) {
+          bestPath[diagonalPath] = void 0;
+          continue;
+        }
+        if (!canRemove || canAdd && removePath.oldPos < addPath2.oldPos) {
+          basePath = this.addToPath(addPath2, true, false, 0, options);
+        } else {
+          basePath = this.addToPath(removePath, false, true, 1, options);
+        }
+        newPos = this.extractCommon(basePath, newTokens, oldTokens, diagonalPath, options);
+        if (basePath.oldPos + 1 >= oldLen && newPos + 1 >= newLen) {
+          return done(this.buildValues(basePath.lastComponent, newTokens, oldTokens)) || true;
+        } else {
+          bestPath[diagonalPath] = basePath;
+          if (basePath.oldPos + 1 >= oldLen) {
+            maxDiagonalToConsider = Math.min(maxDiagonalToConsider, diagonalPath - 1);
+          }
+          if (newPos + 1 >= newLen) {
+            minDiagonalToConsider = Math.max(minDiagonalToConsider, diagonalPath + 1);
+          }
+        }
+      }
+      editLength++;
+    };
+    if (callback) {
+      (function exec2() {
+        setTimeout(function() {
+          if (editLength > maxEditLength || Date.now() > abortAfterTimestamp) {
+            return callback(void 0);
+          }
+          if (!execEditLength()) {
+            exec2();
+          }
+        }, 0);
+      })();
+    } else {
+      while (editLength <= maxEditLength && Date.now() <= abortAfterTimestamp) {
+        const ret = execEditLength();
+        if (ret) {
+          return ret;
+        }
+      }
+    }
+  }
+  addToPath(path11, added, removed, oldPosInc, options) {
+    const last = path11.lastComponent;
+    if (last && !options.oneChangePerToken && last.added === added && last.removed === removed) {
+      return {
+        oldPos: path11.oldPos + oldPosInc,
+        lastComponent: { count: last.count + 1, added, removed, previousComponent: last.previousComponent }
+      };
+    } else {
+      return {
+        oldPos: path11.oldPos + oldPosInc,
+        lastComponent: { count: 1, added, removed, previousComponent: last }
+      };
+    }
+  }
+  extractCommon(basePath, newTokens, oldTokens, diagonalPath, options) {
+    const newLen = newTokens.length, oldLen = oldTokens.length;
+    let oldPos = basePath.oldPos, newPos = oldPos - diagonalPath, commonCount = 0;
+    while (newPos + 1 < newLen && oldPos + 1 < oldLen && this.equals(oldTokens[oldPos + 1], newTokens[newPos + 1], options)) {
+      newPos++;
+      oldPos++;
+      commonCount++;
+      if (options.oneChangePerToken) {
+        basePath.lastComponent = { count: 1, previousComponent: basePath.lastComponent, added: false, removed: false };
+      }
+    }
+    if (commonCount && !options.oneChangePerToken) {
+      basePath.lastComponent = { count: commonCount, previousComponent: basePath.lastComponent, added: false, removed: false };
+    }
+    basePath.oldPos = oldPos;
+    return newPos;
+  }
+  equals(left, right, options) {
+    if (options.comparator) {
+      return options.comparator(left, right);
+    } else {
+      return left === right || !!options.ignoreCase && left.toLowerCase() === right.toLowerCase();
+    }
+  }
+  removeEmpty(array) {
+    const ret = [];
+    for (let i = 0; i < array.length; i++) {
+      if (array[i]) {
+        ret.push(array[i]);
+      }
+    }
+    return ret;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  castInput(value, options) {
+    return value;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tokenize(value, options) {
+    return Array.from(value);
+  }
+  join(chars) {
+    return chars.join("");
+  }
+  postProcess(changeObjects, options) {
+    return changeObjects;
+  }
+  get useLongestToken() {
+    return false;
+  }
+  buildValues(lastComponent, newTokens, oldTokens) {
+    const components = [];
+    let nextComponent;
+    while (lastComponent) {
+      components.push(lastComponent);
+      nextComponent = lastComponent.previousComponent;
+      delete lastComponent.previousComponent;
+      lastComponent = nextComponent;
+    }
+    components.reverse();
+    const componentLen = components.length;
+    let componentPos = 0, newPos = 0, oldPos = 0;
+    for (; componentPos < componentLen; componentPos++) {
+      const component = components[componentPos];
+      if (!component.removed) {
+        if (!component.added && this.useLongestToken) {
+          let value = newTokens.slice(newPos, newPos + component.count);
+          value = value.map(function(value2, i) {
+            const oldValue = oldTokens[oldPos + i];
+            return oldValue.length > value2.length ? oldValue : value2;
+          });
+          component.value = this.join(value);
+        } else {
+          component.value = this.join(newTokens.slice(newPos, newPos + component.count));
+        }
+        newPos += component.count;
+        if (!component.added) {
+          oldPos += component.count;
+        }
+      } else {
+        component.value = this.join(oldTokens.slice(oldPos, oldPos + component.count));
+        oldPos += component.count;
+      }
+    }
+    return components;
+  }
+};
+
+// node_modules/diff/libesm/diff/line.js
+var LineDiff = class extends Diff {
+  constructor() {
+    super(...arguments);
+    this.tokenize = tokenize;
+  }
+  equals(left, right, options) {
+    if (options.ignoreWhitespace) {
+      if (!options.newlineIsToken || !left.includes("\n")) {
+        left = left.trim();
+      }
+      if (!options.newlineIsToken || !right.includes("\n")) {
+        right = right.trim();
+      }
+    } else if (options.ignoreNewlineAtEof && !options.newlineIsToken) {
+      if (left.endsWith("\n")) {
+        left = left.slice(0, -1);
+      }
+      if (right.endsWith("\n")) {
+        right = right.slice(0, -1);
+      }
+    }
+    return super.equals(left, right, options);
+  }
+};
+var lineDiff = new LineDiff();
+function diffLines(oldStr, newStr, options) {
+  return lineDiff.diff(oldStr, newStr, options);
+}
+function tokenize(value, options) {
+  if (options.stripTrailingCr) {
+    value = value.replace(/\r\n/g, "\n");
+  }
+  const retLines = [], linesAndNewlines = value.split(/(\n|\r\n)/);
+  if (!linesAndNewlines[linesAndNewlines.length - 1]) {
+    linesAndNewlines.pop();
+  }
+  for (let i = 0; i < linesAndNewlines.length; i++) {
+    const line = linesAndNewlines[i];
+    if (i % 2 && !options.newlineIsToken) {
+      retLines[retLines.length - 1] += line;
+    } else {
+      retLines.push(line);
+    }
+  }
+  return retLines;
+}
+
+// node_modules/diff/libesm/patch/create.js
+function structuredPatch(oldFileName, newFileName, oldStr, newStr, oldHeader, newHeader, options) {
+  let optionsObj;
+  if (!options) {
+    optionsObj = {};
+  } else if (typeof options === "function") {
+    optionsObj = { callback: options };
+  } else {
+    optionsObj = options;
+  }
+  if (typeof optionsObj.context === "undefined") {
+    optionsObj.context = 4;
+  }
+  const context3 = optionsObj.context;
+  if (optionsObj.newlineIsToken) {
+    throw new Error("newlineIsToken may not be used with patch-generation functions, only with diffing functions");
+  }
+  if (!optionsObj.callback) {
+    return diffLinesResultToPatch(diffLines(oldStr, newStr, optionsObj));
+  } else {
+    const { callback } = optionsObj;
+    diffLines(oldStr, newStr, Object.assign(Object.assign({}, optionsObj), { callback: (diff) => {
+      const patch = diffLinesResultToPatch(diff);
+      callback(patch);
+    } }));
+  }
+  function diffLinesResultToPatch(diff) {
+    if (!diff) {
+      return;
+    }
+    diff.push({ value: "", lines: [] });
+    function contextLines(lines) {
+      return lines.map(function(entry) {
+        return " " + entry;
+      });
+    }
+    const hunks = [];
+    let oldRangeStart = 0, newRangeStart = 0, curRange = [], oldLine = 1, newLine = 1;
+    for (let i = 0; i < diff.length; i++) {
+      const current = diff[i], lines = current.lines || splitLines(current.value);
+      current.lines = lines;
+      if (current.added || current.removed) {
+        if (!oldRangeStart) {
+          const prev = diff[i - 1];
+          oldRangeStart = oldLine;
+          newRangeStart = newLine;
+          if (prev) {
+            curRange = context3 > 0 ? contextLines(prev.lines.slice(-context3)) : [];
+            oldRangeStart -= curRange.length;
+            newRangeStart -= curRange.length;
+          }
+        }
+        for (const line of lines) {
+          curRange.push((current.added ? "+" : "-") + line);
+        }
+        if (current.added) {
+          newLine += lines.length;
+        } else {
+          oldLine += lines.length;
+        }
+      } else {
+        if (oldRangeStart) {
+          if (lines.length <= context3 * 2 && i < diff.length - 2) {
+            for (const line of contextLines(lines)) {
+              curRange.push(line);
+            }
+          } else {
+            const contextSize = Math.min(lines.length, context3);
+            for (const line of contextLines(lines.slice(0, contextSize))) {
+              curRange.push(line);
+            }
+            const hunk = {
+              oldStart: oldRangeStart,
+              oldLines: oldLine - oldRangeStart + contextSize,
+              newStart: newRangeStart,
+              newLines: newLine - newRangeStart + contextSize,
+              lines: curRange
+            };
+            hunks.push(hunk);
+            oldRangeStart = 0;
+            newRangeStart = 0;
+            curRange = [];
+          }
+        }
+        oldLine += lines.length;
+        newLine += lines.length;
+      }
+    }
+    for (const hunk of hunks) {
+      for (let i = 0; i < hunk.lines.length; i++) {
+        if (hunk.lines[i].endsWith("\n")) {
+          hunk.lines[i] = hunk.lines[i].slice(0, -1);
+        } else {
+          hunk.lines.splice(i + 1, 0, "\\ No newline at end of file");
+          i++;
+        }
+      }
+    }
+    return {
+      oldFileName,
+      newFileName,
+      oldHeader,
+      newHeader,
+      hunks
+    };
+  }
+}
+function splitLines(text) {
+  const hasTrailingNl = text.endsWith("\n");
+  const result = text.split("\n").map((line) => line + "\n");
+  if (hasTrailingNl) {
+    result.pop();
+  } else {
+    result.push(result.pop().slice(0, -1));
+  }
+  return result;
+}
+
+// src/report.js
+var import_node_fs2 = require("node:fs");
+var import_node_path2 = require("node:path");
+
+// src/utilities.js
+var import_node_fs = require("node:fs");
+var import_node_path = require("node:path");
+
 // node_modules/@actions/glob/lib/internal-globber.js
 var fs3 = __toESM(require("fs"), 1);
 
@@ -28242,8 +28621,6 @@ async function fetchFilesAndSizes(rootPath, patterns = [], { core, required = tr
 }
 
 // src/report.js
-var import_node_fs2 = require("node:fs");
-var import_node_path2 = require("node:path");
 var DEFAULT_BUILD_DIR = "dist";
 var DEFAULT_MAIN_FILE = "index.js";
 var segments = (filepath) => String(filepath ?? "").split(/[\\/]+/).filter(Boolean);
@@ -28455,11 +28832,353 @@ function buildReport({ headMap = /* @__PURE__ */ new Map(), baseMap = /* @__PURE
   };
 }
 
+// src/changes.js
+var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "bmp"]);
+var DEFAULT_MAX_DIFF_SIZE = 256 * 1024;
+var MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+var DIFF_TIMEOUT = 2e3;
+function isBinary(buffer) {
+  return buffer.subarray(0, 8e3).includes(0);
+}
+var isImage = (filepath) => IMAGE_EXTENSIONS.has(baseExtension(filepath));
+function changeStatus(head, base) {
+  if (isNew(head, base)) return "added";
+  if (isRemoved(head, base)) return "removed";
+  if (head == null) return void 0;
+  return "modified";
+}
+var read = (path11) => {
+  if (!path11) return void 0;
+  try {
+    return (0, import_node_fs3.readFileSync)(path11);
+  } catch {
+    return void 0;
+  }
+};
+function lineDiff2(file, oldText, newText) {
+  const patch = structuredPatch(`a/${file}`, `b/${file}`, oldText, newText, "", "", { context: 3, timeout: DIFF_TIMEOUT });
+  if (!patch) return void 0;
+  let additions = 0;
+  let deletions = 0;
+  patch.hunks.forEach(
+    ({ lines }) => lines.forEach((line) => {
+      if (line.startsWith("+")) additions++;
+      else if (line.startsWith("-")) deletions++;
+    })
+  );
+  return { hunks: patch.hunks, additions, deletions };
+}
+function collectChanges({ headMap, baseMap = /* @__PURE__ */ new Map(), headRoot, baseRoot, extensions = [], maxDiffSize = DEFAULT_MAX_DIFF_SIZE }) {
+  const allowed = normalizeExtensions(extensions);
+  const head = filterByExtensions(headMap, allowed);
+  const base = filterByExtensions(baseMap, allowed);
+  const text = [];
+  const images = [];
+  const stats = { added: 0, removed: 0, modified: 0, additions: 0, deletions: 0 };
+  const files = [.../* @__PURE__ */ new Set([...head.keys(), ...base.keys()])].filter(isReportedFile).sort();
+  files.forEach((file) => {
+    const headByteSize = head.get(file);
+    const baseByteSize = base.get(file);
+    const headPath = headByteSize != null ? (0, import_node_path3.join)(headRoot, file) : void 0;
+    const basePath = baseByteSize != null && baseRoot ? (0, import_node_path3.join)(baseRoot, file) : void 0;
+    const headBuffer = read(headPath);
+    const baseBuffer = read(basePath);
+    const status = changeStatus(headBuffer?.length, baseBuffer?.length);
+    if (!status) return;
+    if (status === "modified" && headBuffer.equals(baseBuffer)) return;
+    stats[status]++;
+    if (isImage(file)) {
+      images.push({ file, status, headByteSize, baseByteSize, headPath, basePath });
+      if (baseExtension(file) !== "svg") return;
+    }
+    const change = { file, status, additions: 0, deletions: 0, hunks: [] };
+    text.push(change);
+    if (headBuffer && isBinary(headBuffer) || baseBuffer && isBinary(baseBuffer)) {
+      change.skipped = "binary file";
+      return;
+    }
+    if (Math.max(headBuffer?.length ?? 0, baseBuffer?.length ?? 0) > maxDiffSize) {
+      change.skipped = "file exceeds max-diff-size";
+      return;
+    }
+    const result = lineDiff2(file, baseBuffer?.toString("utf8") ?? "", headBuffer?.toString("utf8") ?? "");
+    if (!result) {
+      change.skipped = "diff too large to compute";
+      return;
+    }
+    Object.assign(change, result);
+    stats.additions += result.additions;
+    stats.deletions += result.deletions;
+  });
+  return { text, images, stats };
+}
+
+// src/publish.js
+var DEFAULT_REPORT_BRANCH = "file-diff-reports";
+var MAX_ATTEMPTS = 3;
+function reportDir({ pullNumber, sha = "" }) {
+  return pullNumber ? `pr-${pullNumber}` : `sha-${sha.slice(0, 12) || "unknown"}`;
+}
+async function reportUrl({ octokit, owner, repo, dir, pagesUrl }) {
+  let base = pagesUrl;
+  if (!base) {
+    try {
+      base = (await octokit.rest.repos.getPages({ owner, repo })).data.html_url;
+    } catch {
+      base = repo.toLowerCase() === `${owner}.github.io`.toLowerCase() ? `https://${owner}.github.io/` : `https://${owner}.github.io/${repo}/`;
+    }
+  }
+  return `${String(base).replace(/\/+$/, "")}/${dir}/`;
+}
+var isStatus = (error2, status) => error2?.status === status;
+async function publishToBranch({ octokit, owner, repo, branch, dir, files, message }) {
+  const { git } = octokit.rest;
+  const blobs = await Promise.all(
+    files.map(async ({ path: path11, content }) => {
+      const { data } = await git.createBlob({ owner, repo, content: Buffer.from(content).toString("base64"), encoding: "base64" });
+      return { path: `${dir}/${path11}`, mode: "100644", type: "blob", sha: data.sha };
+    })
+  );
+  for (let attempt = 1; ; attempt++) {
+    let parent;
+    try {
+      parent = (await git.getRef({ owner, repo, ref: `heads/${branch}` })).data.object.sha;
+    } catch (error2) {
+      if (!isStatus(error2, 404)) throw error2;
+    }
+    if (!parent) {
+      if (blobs.length === 0) return void 0;
+      const nojekyll = (await git.createBlob({ owner, repo, content: "", encoding: "utf-8" })).data.sha;
+      const tree2 = (await git.createTree({ owner, repo, tree: [...blobs, { path: ".nojekyll", mode: "100644", type: "blob", sha: nojekyll }] })).data.sha;
+      const commit2 = (await git.createCommit({ owner, repo, message, tree: tree2, parents: [] })).data.sha;
+      try {
+        await git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: commit2 });
+        return commit2;
+      } catch (error2) {
+        if (!isStatus(error2, 422) || attempt >= MAX_ATTEMPTS) throw error2;
+        continue;
+      }
+    }
+    const baseTree = (await git.getCommit({ owner, repo, commit_sha: parent })).data.tree.sha;
+    const existing = (await git.getTree({ owner, repo, tree_sha: baseTree, recursive: "true" })).data.tree;
+    const keep = new Set(blobs.map(({ path: path11 }) => path11));
+    const stale = existing.filter(({ path: path11, type }) => type === "blob" && path11.startsWith(`${dir}/`) && !keep.has(path11)).map(({ path: path11 }) => ({ path: path11, mode: "100644", type: "blob", sha: null }));
+    const entries = [...blobs, ...stale];
+    if (entries.length === 0) return void 0;
+    const tree = (await git.createTree({ owner, repo, base_tree: baseTree, tree: entries })).data.sha;
+    if (tree === baseTree) return void 0;
+    const commit = (await git.createCommit({ owner, repo, message, tree, parents: [parent] })).data.sha;
+    try {
+      await git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit, force: false });
+      return commit;
+    } catch (error2) {
+      if (!isStatus(error2, 422) || attempt >= MAX_ATTEMPTS) throw error2;
+    }
+  }
+}
+
+// src/render.js
+var SUMMARY_BUDGET = 900 * 1024;
+var BAR_WIDTH = 20;
+var STATUS_LABEL = { added: "\u{1F195} added", removed: "\u{1F6A8} removed", modified: "\u270F\uFE0F modified" };
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function sizeRows(sections = []) {
+  return sections.flatMap(
+    ({ name, files }) => [...files.keys()].filter(isReportedFile).sort().map((file) => ({ packageName: name, file, ...files.get(file) }))
+  );
+}
+function textBar(value, max) {
+  if (!value || !max) return "";
+  return "\u2588".repeat(Math.max(1, Math.round(value / max * BAR_WIDTH)));
+}
+function fenceFor(content) {
+  const longest = Math.max(0, ...(String(content).match(/`+/g) ?? []).map((run2) => run2.length));
+  return "`".repeat(Math.max(3, longest + 1));
+}
+function unifiedDiff({ file, status, hunks }) {
+  const from = status === "added" ? "/dev/null" : `a/${file}`;
+  const to = status === "removed" ? "/dev/null" : `b/${file}`;
+  const body = hunks.flatMap(({ oldStart, oldLines, newStart, newLines, lines }) => [`@@ -${oldStart},${oldLines} +${newStart},${newLines} @@`, ...lines]);
+  return [`--- ${from}`, `+++ ${to}`, ...body].join("\n");
+}
+function renderStats({ stats, imageCount = 0 }) {
+  const files = stats.added + stats.removed + stats.modified;
+  if (files === 0) return "**Changed files**: none";
+  const parts = [`**Changed files**: ${files}`, `${stats.added} added`, `${stats.removed} removed`, `${stats.modified} modified`];
+  const lines = `**Lines**: +${stats.additions} / \u2212${stats.deletions}`;
+  const images = imageCount ? ` \xB7 **Images**: ${imageCount}` : "";
+  return `${parts[0]} (${parts.slice(1).join(", ")}) \xB7 ${lines}${images}`;
+}
+function renderSizeChartMarkdown(rows, hasBase) {
+  if (rows.length === 0) return ["No size changes."];
+  const max = Math.max(...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
+  const header = hasBase ? ["Package", "File", "Base", "Head", "\u0394", "Chart (base / head)"] : ["Package", "File", "Head", "Chart"];
+  const body = rows.map(({ packageName, file, headByteSize, baseByteSize }) => {
+    const headBar = `\`${textBar(headByteSize, max) || "\xB7"}\``;
+    if (!hasBase) return [packageName, file, bytesToSize(headByteSize), headBar];
+    const baseBar = `\`${textBar(baseByteSize, max) || "\xB7"}\``;
+    const percent = printPercentChange(headByteSize, baseByteSize);
+    const delta = printChange(headByteSize, baseByteSize);
+    return [packageName, file, bytesToSize(baseByteSize), bytesToSize(headByteSize), delta !== "-" && percent ? `${delta} (${percent})` : delta, `${baseBar}<br/>${headBar}`];
+  });
+  return [header, header.map(() => "-"), ...body].map((row) => `| ${row.join(" | ")} |`);
+}
+function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY_BUDGET, reportUrl: reportUrl2 }) {
+  const out = ["<details open>", "<summary><b>\u{1F4CA} Sizes</b></summary>", "", ...renderSizeChartMarkdown(rows, hasBase), "", "</details>", ""];
+  out.push("<details>", `<summary><b>\u{1F4DD} Line diffs (${changes.text.length})</b></summary>`, "");
+  if (changes.text.length === 0) out.push("No text changes.", "");
+  let spent = 0;
+  const truncated = [];
+  changes.text.forEach((change) => {
+    const heading = `#### \`${change.file}\` \u2014 ${STATUS_LABEL[change.status]} (+${change.additions} / \u2212${change.deletions})`;
+    if (change.skipped) {
+      out.push(heading, "", `_Line diff skipped: ${change.skipped}._`, "");
+      return;
+    }
+    const diff = unifiedDiff(change);
+    const fence = fenceFor(diff);
+    const block = [heading, "", `${fence}diff`, diff, fence, ""].join("\n");
+    const size = Buffer.byteLength(block);
+    if (spent + size > budget) {
+      truncated.push(change.file);
+      return;
+    }
+    spent += size;
+    out.push(block);
+  });
+  if (truncated.length > 0) {
+    const where = reportUrl2 ? ` See the [full report](${reportUrl2}).` : "";
+    out.push(`> [!NOTE]`, `> ${truncated.length} diff(s) omitted to stay under GitHub's summary size limit: ${truncated.map((f) => `\`${f}\``).join(", ")}.${where}`, "");
+  }
+  out.push("</details>", "");
+  if (changes.images.length > 0) {
+    out.push("<details>", `<summary><b>\u{1F5BC}\uFE0F Visual diffs (${changes.images.length})</b></summary>`, "");
+    out.push("| File | Status | Base | Head |", "| - | - | - | - |");
+    changes.images.forEach(({ file, status, baseByteSize, headByteSize }) => out.push(`| \`${file}\` | ${STATUS_LABEL[status]} | ${bytesToSize(baseByteSize)} | ${bytesToSize(headByteSize)} |`));
+    out.push("", reportUrl2 ? `Side-by-side previews are in the [full report](${reportUrl2}).` : "_Set `visual-diff: branch` to publish side-by-side image previews._", "", "</details>", "");
+  }
+  return out.join("\n");
+}
+function renderDiffTable({ hunks }) {
+  const rows = [];
+  hunks.forEach(({ oldStart, oldLines, newStart, newLines, lines }) => {
+    rows.push(`<tr class="hunk"><td></td><td></td><td>@@ -${oldStart},${oldLines} +${newStart},${newLines} @@</td></tr>`);
+    let oldNo = oldStart;
+    let newNo = newStart;
+    lines.forEach((line) => {
+      const sign = line[0];
+      const code = escapeHtml(line.slice(1));
+      if (sign === "+") rows.push(`<tr class="add"><td></td><td>${newNo++}</td><td>+${code}</td></tr>`);
+      else if (sign === "-") rows.push(`<tr class="del"><td>${oldNo++}</td><td></td><td>-${code}</td></tr>`);
+      else if (sign === "\\") rows.push(`<tr class="meta"><td></td><td></td><td>${escapeHtml(line)}</td></tr>`);
+      else rows.push(`<tr><td>${oldNo++}</td><td>${newNo++}</td><td> ${code}</td></tr>`);
+    });
+  });
+  return `<table class="diff">${rows.join("")}</table>`;
+}
+function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = /* @__PURE__ */ new Map(), context: context3 = "" }) {
+  const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
+  const pct = (v) => `${((v ?? 0) / max * 100).toFixed(2)}%`;
+  const sizeRowsHtml = rows.map(({ packageName, file, headByteSize, baseByteSize }) => {
+    const delta = hasBase ? printChange(headByteSize, baseByteSize) : "";
+    const percent = hasBase ? printPercentChange(headByteSize, baseByteSize) : "";
+    const bars = [hasBase ? `<div class="bar base" style="width:${pct(baseByteSize)}" title="base ${escapeHtml(bytesToSize(baseByteSize))}"></div>` : "", `<div class="bar head" style="width:${pct(headByteSize)}" title="head ${escapeHtml(bytesToSize(headByteSize))}"></div>`].join("");
+    return `<tr><td>${escapeHtml(packageName)}</td><td><code>${escapeHtml(file)}</code></td>${hasBase ? `<td>${escapeHtml(bytesToSize(baseByteSize))}</td>` : ""}<td>${escapeHtml(bytesToSize(headByteSize))}</td>${hasBase ? `<td>${escapeHtml(delta)}${delta !== "-" && percent ? ` (${escapeHtml(percent)})` : ""}</td>` : ""}<td class="chart">${bars}</td></tr>`;
+  }).join("");
+  const sizesPanel = rows.length ? `<table class="sizes"><thead><tr><th>Package</th><th>File</th>${hasBase ? "<th>Base</th>" : ""}<th>Head</th>${hasBase ? "<th>\u0394</th>" : ""}<th>Chart${hasBase ? ' <span class="key base">base</span> <span class="key head">head</span>' : ""}</th></tr></thead><tbody>${sizeRowsHtml}</tbody></table>` : "<p>No size changes.</p>";
+  const diffsPanel = changes.text.length ? changes.text.map((change) => {
+    const body = change.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(change.skipped)}.</p>` : renderDiffTable(change);
+    return `<details open class="file"><summary><code>${escapeHtml(change.file)}</code> <span class="status ${change.status}">${change.status}</span> <span class="add">+${change.additions}</span> <span class="del">\u2212${change.deletions}</span></summary>${body}</details>`;
+  }).join("") : "<p>No text changes.</p>";
+  const image = (url, label) => url ? `<figure><img src="${escapeHtml(url)}" alt="${label}" loading="lazy"><figcaption>${label}</figcaption></figure>` : `<figure class="empty"><figcaption>${label}: not available</figcaption></figure>`;
+  const visualPanel = changes.images.map(({ file, status, headByteSize, baseByteSize }) => {
+    const urls = imageUrls.get(file) ?? {};
+    return `<section class="image"><h3><code>${escapeHtml(file)}</code> <span class="status ${status}">${status}</span> <small>${escapeHtml(bytesToSize(baseByteSize))} \u2192 ${escapeHtml(bytesToSize(headByteSize))}</small></h3><div class="pair">${image(urls.base, "Base")}${image(urls.head, "Head")}</div></section>`;
+  }).join("");
+  const tabs = [["sizes", `Sizes (${rows.length})`, sizesPanel], ["diffs", `Line diffs (${changes.text.length})`, diffsPanel], ...changes.images.length ? [["visual", `Visual diffs (${changes.images.length})`, visualPanel]] : []];
+  const { stats } = changes;
+  const totalLine = hasBase ? `${escapeHtml(bytesToSize(totals.baseTotal))} \u2192 ${escapeHtml(bytesToSize(totals.headTotal))} (${escapeHtml(printChange(totals.headTotal, totals.baseTotal))})` : escapeHtml(bytesToSize(totals.headTotal));
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(title)}</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--add:#dafbe1;--del:#ffebe9;--hunk:#ddf4ff;--base:#8c959f;--head:#0969da}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#3d444d;--add:#12261e;--del:#25171c;--hunk:#121d2f;--base:#656c76;--head:#4493f8}}
+*{box-sizing:border-box}body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
+main{max-width:1200px;margin:0 auto}h1{font-size:1.4rem;margin:0 0 4px}.meta-line{color:var(--muted);margin:0 0 12px}
+.stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 16px;padding:0;list-style:none}
+[role=tablist]{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+[role=tab]{font:inherit;color:inherit;background:none;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;padding:6px 12px;cursor:pointer;white-space:nowrap}
+[role=tab][aria-selected=true]{border-color:var(--line);background:var(--bg);margin-bottom:-1px;font-weight:600}
+[role=tabpanel]{padding:16px 0;overflow-x:auto}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.chart{min-width:160px}.bar{height:8px;border-radius:4px;margin:2px 0}.bar.base{background:var(--base)}.bar.head{background:var(--head)}
+.key{display:inline-block;padding:0 6px;border-radius:4px;color:#fff;font-weight:400;font-size:.8em}.key.base{background:var(--base)}.key.head{background:var(--head)}
+details.file{border:1px solid var(--line);border-radius:6px;margin:0 0 12px;overflow:hidden}details.file>summary{padding:6px 10px;cursor:pointer;background:color-mix(in srgb,var(--line) 25%,transparent)}
+.diff{font:12px/1.45 ui-monospace,monospace}.diff td{border:0;padding:0 8px;white-space:pre}.diff td:nth-child(-n+2){color:var(--muted);text-align:right;user-select:none;width:1%}
+.diff tr.add{background:var(--add)}.diff tr.del{background:var(--del)}.diff tr.hunk,.diff tr.meta{background:var(--hunk);color:var(--muted)}
+span.add{color:#1a7f37}span.del{color:#d1242f}.status{font-size:.8em;padding:0 6px;border:1px solid var(--line);border-radius:10px}.note{padding:8px 10px;margin:0;color:var(--muted)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}figure{margin:0;border:1px solid var(--line);border-radius:6px;padding:8px;text-align:center}
+figure img{max-width:100%;height:auto;background:repeating-conic-gradient(#8884 0 25%,transparent 0 50%) 0 0/16px 16px}figure.empty{color:var(--muted);display:grid;place-items:center;min-height:80px}
+</style>
+</head>
+<body>
+<main>
+<h1>${escapeHtml(title)}</h1>
+${context3 ? `<p class="meta-line">${escapeHtml(context3)}</p>` : ""}
+<ul class="stats"><li><b>Total</b>: ${totalLine}</li><li><b>Files</b>: ${stats.added} added, ${stats.removed} removed, ${stats.modified} modified</li><li><b>Lines</b>: <span class="add">+${stats.additions}</span> / <span class="del">\u2212${stats.deletions}</span></li></ul>
+<div role="tablist" aria-label="Report sections" hidden>${tabs.map(([id, label], i) => `<button role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(label)}</button>`).join("")}</div>
+${tabs.map(([id, label, html]) => `<section role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}"><h2 class="panel-title">${escapeHtml(label)}</h2>${html}</section>`).join("\n")}
+</main>
+<script>
+(() => {
+	const list = document.querySelector('[role=tablist]');
+	const tabs = [...list.querySelectorAll('[role=tab]')];
+	const select = (tab) => tabs.forEach((t) => {
+		const on = t === tab;
+		t.setAttribute('aria-selected', on);
+		t.tabIndex = on ? 0 : -1;
+		document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+	});
+	list.hidden = false;
+	document.querySelectorAll('.panel-title').forEach((h) => (h.hidden = true));
+	list.addEventListener('click', (e) => { const t = e.target.closest('[role=tab]'); if (t) select(t); });
+	list.addEventListener('keydown', (e) => {
+		const i = tabs.indexOf(document.activeElement);
+		const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+		if (next === undefined || i < 0) return;
+		e.preventDefault();
+		const t = tabs[(next + tabs.length) % tabs.length];
+		t.focus();
+		select(t);
+	});
+	select(tabs.find((t) => location.hash === '#' + t.id.slice(4)) ?? tabs[0]);
+})();
+</script>
+</body>
+</html>
+`;
+}
+
 // src/index.js
+var VISUAL_DIFF_MODES = /* @__PURE__ */ new Set(["summary", "branch", "none"]);
 function getBooleanInput2(name, fallback) {
   if (!getInput(name)) return fallback;
   return getBooleanInput(name);
 }
+function runUrl() {
+  const { GITHUB_SERVER_URL = "https://github.com", GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT } = process.env;
+  if (!GITHUB_REPOSITORY || !GITHUB_RUN_ID) return void 0;
+  const attempt = GITHUB_RUN_ATTEMPT && GITHUB_RUN_ATTEMPT !== "1" ? `/attempts/${GITHUB_RUN_ATTEMPT}` : "";
+  return `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}${attempt}`;
+}
+var encodePath = (path11) => path11.split("/").map(encodeURIComponent).join("/");
 async function run() {
   const token = getInput("token");
   const headPath = getInput("head-path");
@@ -28471,24 +29190,66 @@ async function run() {
   const mainFile = getInput("main-file") || DEFAULT_MAIN_FILE;
   const readPackageJson = getBooleanInput2("read-package-json", true);
   const extensions = getMultilineInput("extensions", { trimWhitespace: true });
+  const visualDiff = (getInput("visual-diff") || "summary").trim().toLowerCase();
+  const reportBranch = getInput("report-branch") || DEFAULT_REPORT_BRANCH;
+  const pagesUrl = getInput("pages-url");
+  const maxDiffSize = Number(getInput("max-diff-size") || DEFAULT_MAX_DIFF_SIZE);
+  if (!VISUAL_DIFF_MODES.has(visualDiff)) throw new Error(`Invalid visual-diff "${visualDiff}"; expected one of: ${[...VISUAL_DIFF_MODES].join(", ")}.`);
+  if (!Number.isFinite(maxDiffSize) || maxDiffSize < 0) throw new Error(`Invalid max-diff-size "${getInput("max-diff-size")}"; expected a byte count.`);
+  const pullRequest = context2.payload.pull_request;
+  const { owner, repo } = context2.repo;
+  const dir = reportDir({ pullNumber: pullRequest?.number, sha: pullRequest?.head?.sha ?? context2.sha });
+  if (visualDiff === "branch" && pullRequest && context2.payload.action === "closed") {
+    const sha = await publishToBranch({ octokit: getOctokit(token), owner, repo, branch: reportBranch, dir, files: [], message: `chore: remove file diff report for #${pullRequest.number}` });
+    info(sha ? `Removed ${dir}/ from ${reportBranch}.` : `Nothing to remove for ${dir}/ on ${reportBranch}.`);
+    return;
+  }
   const headMap = await fetchFilesAndSizes(headPath, fileGlobPattern, { core: core_exports, required: true });
   const baseMap = await fetchFilesAndSizes(basePath, fileGlobPattern, { core: core_exports, required: false });
-  const report = buildReport({
-    headMap,
-    baseMap,
-    hasBase: baseMap.size > 0,
-    rootPath: headPath,
-    buildDir,
-    mainFile,
-    readPackageJson,
-    extensions,
-    core: core_exports
-  });
+  const hasBase = baseMap.size > 0;
+  const report = buildReport({ headMap, baseMap, hasBase, rootPath: headPath, buildDir, mainFile, readPackageJson, extensions, core: core_exports });
+  let changes;
+  let link;
+  let summaryMarkdown = "";
+  if (visualDiff !== "none") {
+    changes = collectChanges({ headMap, baseMap, headRoot: headPath, baseRoot: basePath, extensions, maxDiffSize });
+    const rows = sizeRows(report.sections);
+    const totals = { headTotal: report.headTotal, baseTotal: report.baseTotal };
+    if (visualDiff === "branch") {
+      try {
+        const octokit = getOctokit(token);
+        const imageUrls = /* @__PURE__ */ new Map();
+        const files = [];
+        changes.images.forEach((image) => {
+          const urls = {};
+          [
+            ["head", image.headPath, image.headByteSize],
+            ["base", image.basePath, image.baseByteSize]
+          ].forEach(([side, path11, size]) => {
+            if (!path11 || size > MAX_IMAGE_SIZE) return;
+            files.push({ path: `images/${side}/${image.file}`, content: (0, import_node_fs4.readFileSync)(path11) });
+            urls[side] = `images/${side}/${encodePath(image.file)}`;
+          });
+          imageUrls.set(image.file, urls);
+        });
+        const where = pullRequest ? `${owner}/${repo}#${pullRequest.number}` : `${owner}/${repo}`;
+        const html = renderHtml({ title: commentHeader.replace(/^#+\s*/, "") || "File metrics", rows, hasBase, changes, totals, imageUrls, context: `${where} @ ${(pullRequest?.head?.sha ?? context2.sha ?? "").slice(0, 7)}` });
+        files.push({ path: "index.html", content: html });
+        await publishToBranch({ octokit, owner, repo, branch: reportBranch, dir, files, message: `chore: file diff report for ${pullRequest ? `#${pullRequest.number}` : dir}` });
+        link = await reportUrl({ octokit, owner, repo, dir, pagesUrl });
+        info(`Published the visual diff to ${reportBranch}/${dir}/ (${link}).`);
+      } catch (error2) {
+        warning(`Unable to publish the visual diff to "${reportBranch}" (${error2.message}). Falling back to the job summary; the token needs contents: write.`);
+      }
+    }
+    const summaryLink = runUrl();
+    summaryMarkdown = renderSummaryMarkdown({ rows, hasBase, changes, budget: Math.max(0, SUMMARY_BUDGET - Buffer.byteLength(report.text)), reportUrl: link });
+    link ??= summaryLink;
+  }
   const marker = commentMarker(commentHeader);
-  const content = `${marker}
-${commentHeader}
-
-${report.text}`;
+  const stats = changes ? renderStats({ stats: changes.stats, imageCount: changes.images.length }) : "";
+  const commentStats = [stats, link ? `\u{1F4CA} [View the visual diff](${link})` : ""].filter(Boolean).join("<br/>\n");
+  const content = [marker, commentHeader, "", ...commentStats ? [commentStats, ""] : [], report.text].join("\n");
   if (shouldAddComment) {
     await addComment({ marker, content, token, core: core_exports });
   }
@@ -28496,12 +29257,11 @@ ${report.text}`;
   info(report.text);
   endGroup();
   if (process.env.GITHUB_STEP_SUMMARY) {
-    await summary.addRaw(`${commentHeader}
-
-${report.text}`, true).write();
+    await summary.addRaw([commentHeader, "", ...stats ? [stats, ""] : [], report.text, "", summaryMarkdown].join("\n"), true).write();
   }
   setOutput("total-size", String(report.headTotal));
   setOutput("has-changed", report.hasChanged ? "true" : "false");
+  setOutput("report-url", link ?? "");
 }
 run().catch((error2) => {
   error(error2.stack ?? String(error2));

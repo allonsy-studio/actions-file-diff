@@ -106,6 +106,10 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 | `extensions`        | no       | —                         | Newline- or comma-separated list of base extensions to report, e.g. `css, js`. Empty reports all files. The `.min`, `.gz` and `.map` layers are stripped before matching, so `index.min.css.gz` counts as `css`.                                                       |
 | `comment`           | no       | `"true"`                  | Whether to post or update the pull request comment.                                                                                                                                                                                                                    |
 | `comment-header`    | no       | `## File metrics`         | First line of the comment. Also used to derive the hidden marker that keeps the comment sticky across runs, so use distinct headers if you run the action more than once per pull request.                                                                             |
+| `visual-diff`       | no       | `summary`                 | Where the visual diff linked from the comment lives: `summary`, `branch` or `none`. See [Visual diff](#visual-diff).                                                                                                                                                   |
+| `report-branch`     | no       | `file-diff-reports`       | Branch the HTML report is committed to when `visual-diff` is `branch`. Created as an orphan branch when missing.                                                                                                                                                       |
+| `pages-url`         | no       | —                         | Base URL that serves `report-branch`. Defaults to the repository's GitHub Pages URL.                                                                                                                                                                                   |
+| `max-diff-size`     | no       | `262144`                  | Largest file, in bytes, that gets a line diff. Larger files are listed without one.                                                                                                                                                                                    |
 
 ## Outputs
 
@@ -113,6 +117,58 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 | ------------- | ------------------------------------------------------------------------------------------------- |
 | `has-changed` | `"true"` when the head total differs from the base total. Always `"false"` when there is no base. |
 | `total-size`  | Head total in bytes.                                                                              |
+| `report-url`  | Link to the visual diff (published page or workflow run). Empty when `visual-diff` is `none`.     |
+
+## Visual diff
+
+The comment includes a stats line (files added, removed and modified; lines added and removed) and a link to a visual diff. Nothing is uploaded as a workflow artifact, so it uses no artifact storage.
+
+The visual diff has three parts:
+
+1. **Sizes**: base and head size per changed file, with bars.
+2. **Line diffs**: a unified diff per changed text file. Minified, `.gz` and `.map` siblings are skipped. Binary files and files over `max-diff-size` are listed without a diff.
+3. **Visual diffs**: base and head side by side for changed images (`png`, `jpg`, `gif`, `svg`, `webp`, `avif`, `ico`, `bmp`). Only shown when an image changed.
+
+### `visual-diff: summary` (default)
+
+- Writes the three parts as collapsible sections in the [job summary](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#adding-a-job-summary). The comment links to the workflow run.
+- No extra permissions or setup.
+- Limits: the summary has no tabs and can't show images (only a list of changed images), and GitHub caps it at 1 MiB, so long diffs are cut off with a note. It is kept for as long as the run's logs.
+
+### `visual-diff: branch`
+
+- Commits a self-contained HTML page with tabs to `<report-branch>/pr-<number>/index.html`, plus changed images (up to 5 MB each). The job summary is still written.
+- When the pull request closes, the action deletes that directory. Add `closed` to the trigger types for this.
+- If publishing fails (for example, a fork pull request with a read-only token), the action warns and links the job summary instead.
+
+Setup:
+
+1. Grant `contents: write` (plus `pull-requests: write` for the comment).
+2. Turn on GitHub Pages: **Settings → Pages → Build and deployment → Deploy from a branch**, then pick `file-diff-reports` and `/ (root)`. The branch exists after the first run.
+3. Pages sites are public on public repositories. On private repositories, Pages visibility depends on your plan.
+
+```yaml
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, closed]
+
+permissions:
+    contents: write # commit the report to file-diff-reports
+    pull-requests: write
+
+jobs:
+    file-diff:
+        runs-on: ubuntu-latest
+        steps:
+            # ...build head and base as in Usage, skipped when the PR is closed:
+            # if: github.event.action != 'closed'
+            - uses: allonsy-studio/actions-file-diff@v1
+              with:
+                  base-path: ${{ github.workspace }}/base
+                  visual-diff: branch
+```
+
+On a `closed` event the action only removes the report, so the build steps can be skipped with `if: github.event.action != 'closed'`.
 
 ### How sizes are counted
 

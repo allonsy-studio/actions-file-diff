@@ -74,8 +74,8 @@ jobs:
                   file-glob-pattern: "**/dist/**"
                   comment: "false"
 
-            # Expected head total: foo -> 50 (index.min.css stands in for index.css),
-            # bar -> 5000 (index.js). .gz files are not counted. 50 + 5000 = 5050.
+            # Expected head total: foo -> 50 (index.min.css stands in for index.css)
+            # + 200 (icon.svg), bar -> 5000 (index.js). .gz files are not counted.
             - name: Assert outputs
               env:
                   CHANGED_HAS_CHANGED: ${{ steps.changed.outputs.has-changed }}
@@ -84,6 +84,8 @@ jobs:
                   SAME_TOTAL_SIZE: ${{ steps.same.outputs.total-size }}
                   NOBASE_HAS_CHANGED: ${{ steps.nobase.outputs.has-changed }}
                   NOBASE_TOTAL_SIZE: ${{ steps.nobase.outputs.total-size }}
+                  CHANGED_REPORT_URL: ${{ steps.changed.outputs.report-url }}
+                  EXPECTED_REPORT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
               run: |
                   failed=0
                   # assert <label> <expected> <actual>
@@ -97,11 +99,13 @@ jobs:
                   }
 
                   assert "steps.changed.outputs.has-changed" "true" "${CHANGED_HAS_CHANGED}"
-                  assert "steps.changed.outputs.total-size" "5050" "${CHANGED_TOTAL_SIZE}"
+                  assert "steps.changed.outputs.total-size" "5250" "${CHANGED_TOTAL_SIZE}"
                   assert "steps.same.outputs.has-changed" "false" "${SAME_HAS_CHANGED}"
-                  assert "steps.same.outputs.total-size" "5050" "${SAME_TOTAL_SIZE}"
+                  assert "steps.same.outputs.total-size" "5250" "${SAME_TOTAL_SIZE}"
                   assert "steps.nobase.outputs.has-changed" "false" "${NOBASE_HAS_CHANGED}"
-                  assert "steps.nobase.outputs.total-size" "5050" "${NOBASE_TOTAL_SIZE}"
+                  assert "steps.nobase.outputs.total-size" "5250" "${NOBASE_TOTAL_SIZE}"
+                  # report-url links the run (attempt suffix on re-runs).
+                  assert "steps.changed.outputs.report-url" "${EXPECTED_REPORT_URL}" "${CHANGED_REPORT_URL%/attempts/*}"
 
                   if [[ "${failed}" -ne 0 ]]; then
                       echo "::error::Self-test failed: one or more outputs did not match the fixture expectations (see above)."
