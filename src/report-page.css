@@ -164,6 +164,7 @@ details.file > summary {
 
 .diff {
 	font: var(--mono);
+	tab-size: 4;
 }
 
 .diff td {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { MAX_IMAGE_SIZE } from "./changes.js";
-import { escapeHtml, fenceFor, renderHtml, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, reportFiles, sizeRows, textBar, unifiedDiff } from "./render.js";
+import { barScale, escapeHtml, fenceFor, renderHtml, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, reportFiles, sizeRows, textBar, unifiedDiff } from "./render.js";
 
 const stats = { added: 1, removed: 0, modified: 1, additions: 3, deletions: 1 };
 
@@ -38,10 +38,20 @@ describe("sizeRows", () => {
 	});
 });
 
+describe("barScale", () => {
+	it("uses a log scale so small values stay visible", () => {
+		expect(barScale(1000, 1000)).toBe(1);
+		expect(barScale(0, 1000)).toBe(0);
+		expect(barScale(undefined, 1000)).toBe(0);
+		// Linear would be 0.0025; log keeps it near half the bar.
+		expect(barScale(1000, 400000)).toBeGreaterThan(0.5);
+	});
+});
+
 describe("textBar", () => {
 	it("scales to the maximum with at least one block", () => {
 		expect(textBar(10, 10)).toHaveLength(20);
-		expect(textBar(1, 1000)).toBe("█");
+		expect(textBar(1, 1e12).length).toBe(1);
 		expect(textBar(0, 10)).toBe("");
 	});
 });
@@ -72,8 +82,8 @@ describe("renderStats", () => {
 
 describe("renderSizeChartMarkdown", () => {
 	it("includes base columns only when there is a base", () => {
-		expect(renderSizeChartMarkdown(rows, true)[0]).toBe("| Package | File | Base | Head | Δ | Chart (base / head) |");
-		expect(renderSizeChartMarkdown(rows, false)[0]).toBe("| Package | File | Head | Chart |");
+		expect(renderSizeChartMarkdown(rows, true)[0]).toBe("| Package | File | Base | Head | Δ | Chart (base / head, log) |");
+		expect(renderSizeChartMarkdown(rows, false)[0]).toBe("| Package | File | Head | Chart (log) |");
 		expect(renderSizeChartMarkdown([], true)).toEqual(["No size changes."]);
 	});
 });
@@ -90,6 +100,7 @@ describe("renderSummaryMarkdown", () => {
 		expect(md).toContain("📝 Line diffs (2)");
 		expect(md).toContain("```diff\n--- a/a.css");
 		expect(md).toContain("_Line diff skipped: binary file._");
+		expect(md).toContain("#### `bin.dat` — ✏️ modified\n");
 		expect(md).toContain("🖼️ Visual diffs (1)");
 		expect(md).toContain("visual-diff: branch");
 	});
@@ -116,6 +127,13 @@ describe("renderHtml", () => {
 		expect(html).not.toContain('id="tab-visual"');
 		expect(html).toContain("&lt;x&gt;.css");
 		expect(html).not.toContain("<x>.css");
+	});
+
+	it("hides line counts for skipped files", () => {
+		const skipped = { stats, text: [change("bin.dat", { skipped: "binary file", hunks: [], additions: 0, deletions: 0 })], images: [] };
+		const html = renderHtml({ title: "Report", rows, hasBase: true, changes: skipped, totals });
+		expect(html).toContain('<span class="status modified">modified</span></summary>');
+		expect(html).not.toContain('<span class="add">+0</span>');
 	});
 
 	it("adds the visual tab with image URLs", () => {

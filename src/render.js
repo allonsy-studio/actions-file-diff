@@ -54,14 +54,26 @@ export function sizeRows(sections = []) {
 }
 
 /**
- * Text bar scaled against a maximum.
+ * Bar length as a 0–1 fraction of `max`, on a log scale so small files stay
+ * visible next to large ones.
+ * @param {number|undefined} value
+ * @param {number} max
+ * @returns {number}
+ */
+export function barScale(value, max) {
+	if (!value || !max) return 0;
+	return Math.log1p(value) / Math.log1p(max);
+}
+
+/**
+ * Text bar scaled against a maximum (log scale, see barScale).
  * @param {number|undefined} value
  * @param {number} max
  * @returns {string}
  */
 export function textBar(value, max) {
 	if (!value || !max) return "";
-	return "█".repeat(Math.max(1, Math.round((value / max) * BAR_WIDTH)));
+	return "█".repeat(Math.max(1, Math.round(barScale(value, max) * BAR_WIDTH)));
 }
 
 /**
@@ -111,7 +123,7 @@ export function renderStats({ stats, imageCount = 0 }) {
 export function renderSizeChartMarkdown(rows, hasBase) {
 	if (rows.length === 0) return ["No size changes."];
 	const max = Math.max(...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
-	const header = hasBase ? ["Package", "File", "Base", "Head", "Δ", "Chart (base / head)"] : ["Package", "File", "Head", "Chart"];
+	const header = hasBase ? ["Package", "File", "Base", "Head", "Δ", "Chart (base / head, log)"] : ["Package", "File", "Head", "Chart (log)"];
 	const body = rows.map(({ packageName, file, headByteSize, baseByteSize }) => {
 		const headBar = `\`${textBar(headByteSize, max) || "·"}\``;
 		if (!hasBase) return [packageName, file, bytesToSize(headByteSize), headBar];
@@ -143,7 +155,8 @@ export function renderSummaryMarkdown({ rows, hasBase, changes, budget = SUMMARY
 	let spent = 0;
 	const truncated = [];
 	changes.text.forEach((change) => {
-		const heading = `#### \`${change.file}\` — ${STATUS_LABEL[change.status]} (+${change.additions} / −${change.deletions})`;
+		const counts = change.skipped ? "" : ` (+${change.additions} / −${change.deletions})`;
+		const heading = `#### \`${change.file}\` — ${STATUS_LABEL[change.status]}${counts}`;
 		if (change.skipped) {
 			out.push(heading, "", `_Line diff skipped: ${change.skipped}._`, "");
 			return;
@@ -214,7 +227,7 @@ function renderDiffTable({ hunks }) {
  */
 export function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = new Map(), context = "" }) {
 	const max = Math.max(1, ...rows.flatMap(({ headByteSize, baseByteSize }) => [headByteSize ?? 0, baseByteSize ?? 0]));
-	const pct = (v) => `${(((v ?? 0) / max) * 100).toFixed(2)}%`;
+	const pct = (v) => `${(barScale(v, max) * 100).toFixed(2)}%`;
 
 	const sizeRowsHtml = rows
 		.map(({ packageName, file, headByteSize, baseByteSize }) => {
@@ -225,13 +238,13 @@ export function renderHtml({ title, rows, hasBase, changes, totals, imageUrls = 
 		})
 		.join("");
 
-	const sizesPanel = rows.length ? `<table class="sizes"><thead><tr><th>Package</th><th>File</th>${hasBase ? "<th>Base</th>" : ""}<th>Head</th>${hasBase ? "<th>Δ</th>" : ""}<th>Chart${hasBase ? ' <span class="key base">base</span> <span class="key head">head</span>' : ""}</th></tr></thead><tbody>${sizeRowsHtml}</tbody></table>` : "<p>No size changes.</p>";
+	const sizesPanel = rows.length ? `<table class="sizes"><thead><tr><th>Package</th><th>File</th>${hasBase ? "<th>Base</th>" : ""}<th>Head</th>${hasBase ? "<th>Δ</th>" : ""}<th>Chart <small title="Log scale, so small files stay visible">(log)</small>${hasBase ? ' <span class="key base">base</span> <span class="key head">head</span>' : ""}</th></tr></thead><tbody>${sizeRowsHtml}</tbody></table>` : "<p>No size changes.</p>";
 
 	const diffsPanel = changes.text.length
 		? changes.text
 				.map((change) => {
 					const body = change.skipped ? `<p class="note">Line diff skipped: ${escapeHtml(change.skipped)}.</p>` : renderDiffTable(change);
-					return `<details open class="file"><summary><code>${escapeHtml(change.file)}</code> <span class="status ${change.status}">${change.status}</span> <span class="add">+${change.additions}</span> <span class="del">−${change.deletions}</span></summary>${body}</details>`;
+					return `<details open class="file"><summary><code>${escapeHtml(change.file)}</code> <span class="status ${change.status}">${change.status}</span>${change.skipped ? "" : ` <span class="add">+${change.additions}</span> <span class="del">−${change.deletions}</span>`}</summary>${body}</details>`;
 				})
 				.join("")
 		: "<p>No text changes.</p>";
