@@ -1,4 +1,9 @@
-import { escapeHtml, fenceFor, renderHtml, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, sizeRows, textBar, unifiedDiff } from "./render.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { MAX_IMAGE_SIZE } from "./changes.js";
+import { escapeHtml, fenceFor, renderHtml, renderSizeChartMarkdown, renderStats, renderSummaryMarkdown, reportFiles, sizeRows, textBar, unifiedDiff } from "./render.js";
 
 const stats = { added: 1, removed: 0, modified: 1, additions: 3, deletions: 1 };
 
@@ -126,5 +131,31 @@ describe("renderHtml", () => {
 	it("drops base columns when there is no base", () => {
 		const html = renderHtml({ title: "Report", rows, hasBase: false, changes, totals });
 		expect(html).not.toContain("<th>Base</th>");
+	});
+});
+
+describe("reportFiles", () => {
+	let dir;
+
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), "report-files-"));
+	});
+
+	afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+	it("returns the page plus images, skipping oversized ones", () => {
+		writeFileSync(join(dir, "head.png"), "head");
+		writeFileSync(join(dir, "base.png"), "base");
+		const images = [
+			{ file: "a b/logo.png", status: "modified", headByteSize: 4, baseByteSize: 4, headPath: join(dir, "head.png"), basePath: join(dir, "base.png") },
+			{ file: "big.png", status: "added", headByteSize: MAX_IMAGE_SIZE + 1, headPath: join(dir, "head.png") },
+		];
+		const files = reportFiles({ title: "Report", rows, hasBase: true, changes: { stats, text: [], images }, totals: { headTotal: 1, baseTotal: 1 } });
+
+		expect(files.map(({ path }) => path)).toEqual(["images/head/a b/logo.png", "images/base/a b/logo.png", "index.html"]);
+		expect(String(files[0].content)).toBe("head");
+		const html = String(files.at(-1).content);
+		expect(html).toContain('src="images/head/a%20b/logo.png"');
+		expect(html).toContain("Head: not available");
 	});
 });
