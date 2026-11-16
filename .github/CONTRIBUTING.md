@@ -41,6 +41,7 @@ Changes that don't affect consumers (docs, tests, CI, internal refactors) don't 
 
 ## Pull requests
 
+- Pull requests are squash-merged: the PR title becomes the commit subject & the commit messages its body, so the title must be a valid Conventional Commits subject.
 - Open an issue first for substantive changes — small fixes can skip this.
 - Keep PRs focused. One change per PR is easier to review.
 - Update tests for any behavior change.
