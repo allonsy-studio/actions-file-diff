@@ -43,9 +43,6 @@ const ctx = await esbuild.context({
 	entryPoints: [join(root, "scripts/preview-render.js")],
 	outfile: bundle,
 	...sharedOptions,
-	format: "esm",
-	// CJS deps (@actions/*) call require(); give the ESM bundle one.
-	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 	plugins: [
 		...sharedOptions.plugins,
 		{

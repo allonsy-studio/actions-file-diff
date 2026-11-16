@@ -36,12 +36,12 @@ jobs:
 
             - name: Verify the committed bundle is current
               run: |
-                  if ! git ls-files --error-unmatch dist/index.cjs > /dev/null 2>&1; then
-                      echo "::error::dist/index.cjs is not tracked; run \`yarn build\` and commit the result"
+                  if ! git ls-files --error-unmatch dist/index.js > /dev/null 2>&1; then
+                      echo "::error::dist/index.js is not tracked; run \`yarn build\` and commit the result"
                       exit 1
                   fi
                   if ! git diff --exit-code -- dist/; then
-                      echo "::error::dist/index.cjs is stale; run \`yarn build\` and commit the result"
+                      echo "::error::dist/index.js is stale; run \`yarn build\` and commit the result"
                       exit 1
                   fi
 

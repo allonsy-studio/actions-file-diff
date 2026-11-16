@@ -7,7 +7,7 @@ export default {
 	testEnvironment: "node",
 	testMatch: ["**/src/*.test.js"],
 	// Mirror the esbuild text loader for the report stylesheet.
-	transform: { "\\.css$|\\.client\\.js$": "<rootDir>/scripts/jest-text-transform.cjs" },
+	transform: { "\\.css$|\\.client\\.js$": "<rootDir>/scripts/jest-text-transform.js" },
 	verbose: true,
 	// Unit-test the logic modules. The action
 	// entry shell (index.js) is exercised by the self-test workflow in

@@ -1,5 +1,5 @@
 /** Jest transform that loads a file as a default-exported string, matching the esbuild text loader. */
-module.exports = {
+export default {
 	process(source, path) {
 		// .js files are ESM here ("type": "module"); other extensions load as CommonJS.
 		const value = JSON.stringify(source);

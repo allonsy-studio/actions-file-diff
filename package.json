@@ -18,9 +18,9 @@
 		"url": "https://github.com/allonsy-studio/actions-file-diff/issues"
 	},
 	"type": "module",
-	"main": "dist/index.cjs",
+	"main": "dist/index.js",
 	"files": [
-		"dist/index.cjs",
+		"dist/index.js",
 		"src/changes.js",
 		"src/index.js",
 		"src/page.js",
