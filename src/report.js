@@ -19,6 +19,7 @@ export const DEFAULT_MAIN_FILE = "index.js";
 
 /**
  * @typedef {object} FileEntry
+ * @property {string} path Path relative to the measured roots (unique per file).
  * @property {number|undefined} headByteSize Size on the head checkout, undefined when absent.
  * @property {number|undefined} baseByteSize Size on the base checkout, undefined when absent.
  */
@@ -213,7 +214,7 @@ export function groupByPackage(headMap, baseMap = new Map(), { buildDir = DEFAUL
 		if (!packages.has(packageDir)) packages.set(packageDir, { name: packageName, packageDir, files: new Map() });
 		const { files } = packages.get(packageDir);
 		if (files.has(readableFilename)) return;
-		files.set(readableFilename, { headByteSize: headMap.get(filepath), baseByteSize: baseMap.get(filepath) });
+		files.set(readableFilename, { path: filepath, headByteSize: headMap.get(filepath), baseByteSize: baseMap.get(filepath) });
 	};
 
 	[...headMap.keys(), ...baseMap.keys()].forEach(add);
@@ -382,6 +383,30 @@ export function buildSections(packages, { hasBase, rootPath = ".", buildDir = DE
 /** Renders a header and rows as markdown table lines. */
 const toTable = (header, rows) => [header, header.map(() => "-"), ...rows].map((row) => `| ${row.join(" | ")} |`);
 
+/** Characters reserved for the fixed parts of the report (summary lines, footer, wrappers). */
+const FIXED_OVERHEAD = 1500;
+
+/** Share of the length budget the main-file summary table may use. */
+const SUMMARY_SHARE = 0.25;
+
+/**
+ * Takes table rows while their rendered length fits in the budget.
+ * @param {string[][]} rows
+ * @param {number} budget Characters available.
+ * @returns {{ kept: string[][], used: number }}
+ */
+export function fitRows(rows, budget) {
+	const kept = [];
+	let used = 0;
+	for (const row of rows) {
+		const length = row.join(" | ").length + 6;
+		if (used + length > budget) break;
+		used += length;
+		kept.push(row);
+	}
+	return { kept, used };
+}
+
 /**
  * Builds the full report: summary lines, detail markdown lines, totals and
  * the has-changed flag. Totals use the same formula as the `total-size` and
@@ -395,10 +420,11 @@ const toTable = (header, rows) => [header, header.map(() => "-"), ...rows].map((
  * @param {string} [options.mainFile]
  * @param {boolean} [options.readPackageJson]
  * @param {string|string[]} [options.extensions]
+ * @param {number} [options.maxLength] Soft cap on `text` length in characters. Rows past it are replaced by a note, so the report fits in a pull request comment.
  * @param {{ warning?: Function }} [options.core]
- * @returns {{ summary: string[], markdown: string[], text: string, headTotal: number, baseTotal: number, hasBase: boolean, hasChanged: boolean, sections: Section[] }}
+ * @returns {{ summary: string[], markdown: string[], text: string, headTotal: number, baseTotal: number, hasBase: boolean, hasChanged: boolean, sections: Section[], omitted: { files: number, packages: number } }}
  */
-export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase = baseMap.size > 0, rootPath = ".", buildDir = DEFAULT_BUILD_DIR, mainFile = DEFAULT_MAIN_FILE, readPackageJson = true, extensions = [], core } = {}) {
+export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase = baseMap.size > 0, rootPath = ".", buildDir = DEFAULT_BUILD_DIR, mainFile = DEFAULT_MAIN_FILE, readPackageJson = true, extensions = [], maxLength = Infinity, core } = {}) {
 	const allowed = normalizeExtensions(extensions);
 	const head = filterByExtensions(headMap, allowed);
 	const base = hasBase ? filterByExtensions(baseMap, allowed) : new Map();
@@ -411,14 +437,15 @@ export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase 
 
 	const summary = ["### Summary", `**Total size**: ${bytesToSize(headTotal)}<sup>*</sup>`];
 	const markdown = [];
-	const summaryRows = [];
+	const omitted = { files: 0, packages: 0 };
 
 	if (sections.length === 0) {
 		summary.push("", "🎉 No changes detected in any packages");
 	} else {
 		const tableHead = ["Filename", "Head", "Minified", "Gzipped", ...(hasBase ? ["Compared to base"] : [])];
 
-		sections.forEach(({ name, mainFile: packageMain, files }) => {
+		const summaryRows = [];
+		const tables = sections.map(({ name, mainFile: packageMain, files }) => {
 			const rows = [];
 			[...files.keys()].sort().forEach((readableFilename) => {
 				if (!isReportedFile(readableFilename)) return;
@@ -427,8 +454,32 @@ export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase 
 				if (isMainFile) summaryRows.push([name, ...row.slice(1)]);
 				rows.push(row);
 			});
-			markdown.push("", `#### ${name}`, "", ...toTable(tableHead, rows));
+			return { name, rows };
 		});
+
+		let budget = maxLength - FIXED_OVERHEAD;
+		const summaryHead = ["Package", "Size", "Minified", "Gzipped", ...(hasBase ? ["Δ"] : [])];
+		const summaryFit = fitRows(summaryRows, Math.max(0, budget * SUMMARY_SHARE));
+		budget -= summaryFit.used;
+
+		tables.forEach(({ name, rows }) => {
+			const header = ["", `#### ${name}`, "", ...toTable(tableHead, [])];
+			const headerLength = header.join("\n").length + 1;
+			if (budget < headerLength + 200) {
+				omitted.packages++;
+				omitted.files += rows.length;
+				return;
+			}
+			budget -= headerLength;
+			const { kept, used } = fitRows(rows, budget);
+			budget -= used;
+			markdown.push("", `#### ${name}`, "", ...toTable(tableHead, kept));
+			if (kept.length < rows.length) {
+				omitted.files += rows.length - kept.length;
+				markdown.push("", `<em>… ${rows.length - kept.length} more ${rows.length - kept.length === 1 ? "file" : "files"} not shown.</em>`);
+			}
+		});
+		if (omitted.packages > 0) markdown.push("", `<em>… ${omitted.packages} more ${omitted.packages === 1 ? "package" : "packages"} not shown.</em>`);
 
 		if (!hasBase) {
 			summary.push("No base branch to compare against.", "");
@@ -443,11 +494,9 @@ export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase 
 			markdown.unshift('<a name="details"></a>', "<details>", "<summary><b>File change details</b></summary>", "");
 			markdown.push("", "</details>");
 		}
-	}
 
-	if (summaryRows.length > 0) {
-		const summaryHead = ["Package", "Size", "Minified", "Gzipped", ...(hasBase ? ["Δ"] : [])];
-		summary.push(...toTable(summaryHead, summaryRows));
+		if (summaryFit.kept.length > 0) summary.push(...toTable(summaryHead, summaryFit.kept));
+		if (summaryFit.kept.length < summaryRows.length) summary.push("", `<em>… ${summaryRows.length - summaryFit.kept.length} more packages not shown.</em>`);
 	}
 
 	markdown.push("", "<small>", "* <em>Size is the sum of all reported files, using the minified size where one exists.</em><br/>", "* <em>An ASCII character in UTF-8 is 8 bits or 1 byte.</em>", "</small>");
@@ -461,5 +510,6 @@ export function buildReport({ headMap = new Map(), baseMap = new Map(), hasBase 
 		hasBase,
 		hasChanged,
 		sections,
+		omitted,
 	};
 }

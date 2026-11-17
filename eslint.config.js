@@ -10,7 +10,7 @@ import eslintConfigPrettier from "eslint-config-prettier/flat";
 
 export default defineConfig([
 	{
-		ignores: ["**/node_modules/**", ".yarn/**", ".cache/**", "dist/**", "scripts/template/**"],
+		ignores: ["**/node_modules/**", ".yarn/**", ".cache/**", "dist/**", "preview/**", "scripts/template/**"],
 	},
 	{
 		files: ["**/*.js"],
@@ -32,6 +32,16 @@ export default defineConfig([
 			// Don't let unfinished markers ride along into a published action.
 			"no-warning-comments": ["warn", { terms: ["todo", "fixme", "xxx"], location: "anywhere" }],
 		},
+	},
+	// Inlined into the published report page; runs in the browser.
+	{
+		files: ["src/*.client.js"],
+		languageOptions: { sourceType: "script", globals: globals.browser },
+	},
+	// Playwright tests pass functions to the page, so they use browser globals as well as Node's.
+	{
+		files: ["test/browser.test.js"],
+		languageOptions: { globals: { ...globals.node, ...globals.browser } },
 	},
 	// Specific to tooling and repository-management scripts.
 	{

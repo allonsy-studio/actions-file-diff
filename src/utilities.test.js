@@ -1,9 +1,9 @@
 import { jest } from "@jest/globals";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { bytesToSize, fetchFilesAndSizes, globPatterns } from "./utilities.js";
+import { bytesToSize, fetchFilesAndSizes, globPatterns, mapLimit } from "./utilities.js";
 
 describe("bytesToSize", () => {
 	it("returns '0' for a zero-byte file", () => {
@@ -42,6 +42,34 @@ describe("bytesToSize consistency", () => {
 		expect(bytesToSize(1023)).toBe("1.00 KB");
 		expect(bytesToSize(1024 * 1024)).toBe("1.00 MB");
 		expect(bytesToSize(1536)).toBe("1.50 KB");
+	});
+
+	it("picks the unit after rounding", () => {
+		expect(bytesToSize(1024 ** 2 - 1)).toBe("1.00 MB");
+		expect(bytesToSize(1024 ** 3 - 1)).toBe("1.00 GB");
+		expect(bytesToSize(1024 ** 4 - 1)).toBe("1.00 TB");
+		expect(bytesToSize(1024 ** 5)).toBe("1024.00 TB");
+	});
+});
+
+describe("mapLimit", () => {
+	it("preserves order and never exceeds the limit", async () => {
+		let active = 0;
+		let peak = 0;
+		const out = await mapLimit([5, 1, 4, 2, 3, 0], 2, async (n) => {
+			active++;
+			peak = Math.max(peak, active);
+			await new Promise((resolve) => setTimeout(resolve, n));
+			active--;
+			return n * 10;
+		});
+		expect(out).toEqual([50, 10, 40, 20, 30, 0]);
+		expect(peak).toBe(2);
+	});
+
+	it("handles empty input and clamps the limit", async () => {
+		await expect(mapLimit([], 4, async (x) => x)).resolves.toEqual([]);
+		await expect(mapLimit([1, 2], 0, async (x) => x + 1)).resolves.toEqual([2, 3]);
 	});
 });
 
@@ -101,6 +129,23 @@ describe("fetchFilesAndSizes", () => {
 		const listed = log.info.mock.calls.map(([line]) => line).join("\n");
 		expect(listed).toContain("README.md");
 		expect(listed).not.toContain("node_modules");
+	});
+
+	it("never follows symbolic links, so files outside the root stay unread", async () => {
+		const outside = mkdtempSync(join(tmpdir(), "file-diff-outside-"));
+		writeFileSync(join(outside, "secret.js"), "TOP-SECRET");
+		mkdirSync(join(outside, "dist"));
+		writeFileSync(join(outside, "dist/other.js"), "other");
+		symlinkSync(join(outside, "secret.js"), join(root, "pkg/dist/leak.js"));
+		symlinkSync(join(outside, "dist"), join(root, "pkg/linked-dist"));
+		const log = core();
+		try {
+			const files = await fetchFilesAndSizes(root, ["**/dist/**", "**/linked-dist/**"], { core: log });
+			expect([...files.keys()].sort()).toEqual(["base/dist/index.css", "pkg/dist/index.css", "pkg/dist/nested/a.js"]);
+			expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("ignored"));
+		} finally {
+			rmSync(outside, { recursive: true, force: true });
+		}
 	});
 
 	it("warns and returns empty when an optional path matches nothing", async () => {

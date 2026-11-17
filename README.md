@@ -92,6 +92,12 @@ jobs:
 
 If `base-path` is omitted, or the directory does not exist, the action reports head totals only and `has-changed` is always `"false"`.
 
+## Requirements
+
+- **`git` on the PATH.** Line diffs run `git diff --no-index`. It is preinstalled on GitHub-hosted runners. In a container or on a self-hosted runner, install it. Without it the action still reports sizes and images, skips the line diffs, and warns.
+- **Built output, not source.** Line diffs are for compiled assets (your `dist/`), which are usually not committed or are minified, so the pull request's Files tab can't show them. Review source changes there as usual.
+- **Regular files only.** The trees can come from an untrusted pull request, so symbolic links are never followed (a link could point outside the checkout). They are skipped with a warning.
+
 ## Inputs
 
 | Name                | Required | Default                   | Description                                                                                                                                                                                                                                                            |
@@ -106,6 +112,11 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 | `extensions`        | no       | —                         | Newline- or comma-separated list of base extensions to report, e.g. `css, js`. Empty reports all files. The `.min`, `.gz` and `.map` layers are stripped before matching, so `index.min.css.gz` counts as `css`.                                                       |
 | `comment`           | no       | `"true"`                  | Whether to post or update the pull request comment.                                                                                                                                                                                                                    |
 | `comment-header`    | no       | `## File metrics`         | First line of the comment. Also used to derive the hidden marker that keeps the comment sticky across runs, so use distinct headers if you run the action more than once per pull request.                                                                             |
+| `visual-diff`       | no       | `summary`                 | Where the visual diff linked from the comment lives: `summary`, `branch` or `none`. See [Visual diff](#visual-diff).                                                                                                                                                   |
+| `report-branch`     | no       | `file-diff-reports`       | Branch the HTML report is committed to when `visual-diff` is `branch`. Created as an orphan branch when missing.                                                                                                                                                       |
+| `pages-url`         | no       | —                         | Base URL that serves `report-branch`. Defaults to the repository's GitHub Pages URL.                                                                                                                                                                                   |
+| `max-diff-size`     | no       | `262144`                  | Largest file, in bytes, that gets a line diff. Larger files are listed without one.                                                                                                                                                                                    |
+| `max-diff-lines`    | no       | `20000`                   | Most diff lines kept for the whole report. A diff that would go over is left out of the report, with its line counts kept. `0` leaves out every diff.                                                                                                                  |
 
 ## Outputs
 
@@ -113,6 +124,65 @@ If `base-path` is omitted, or the directory does not exist, the action reports h
 | ------------- | ------------------------------------------------------------------------------------------------- |
 | `has-changed` | `"true"` when the head total differs from the base total. Always `"false"` when there is no base. |
 | `total-size`  | Head total in bytes.                                                                              |
+| `report-url`  | Link to the visual diff (published page or workflow run). Empty when `visual-diff` is `none`.     |
+
+## Visual diff
+
+The comment includes a stats line (files added, removed and modified; lines added and removed) and a link to a visual diff. Nothing is uploaded as a workflow artifact, so it uses no artifact storage.
+
+The visual diff opens with summary cards (total size, files changed, lines, images), then has three parts:
+
+1. **Overview**: base and head size per file, grouped by package, with log-scale bars. File names link to their diff.
+2. **Code**: a diff per changed text file, with a file list, unified or split layout, and word-level highlights on the lines that were edited into one another. Minified, `.gz` and `.map` siblings are skipped. Binary files, unreadable files and files over `max-diff-size` are listed without a diff, with the reason. Once the report holds `max-diff-lines` lines, further diffs are left out but keep their +/− counts. Each diff is stored once in the page and its rows are built when the file opens, so a large report stays fast; find-in-page only searches files that are open.
+3. **Visual**: changed images (`png`, `jpg`, `gif`, `svg`, `webp`, `avif`, `ico`, `bmp`), compared side by side, as an overlay with an opacity slider, with a swipe slider (drag the image or use the range control), or as a difference blend. Background (checker, light, dark) and zoom (fit, 1×, 2×, 4×) controls; <kbd>J</kbd>/<kbd>K</kbd> switch images. Only shown when an image changed.
+
+The full page (cards, tabs, split view and image compare modes) needs `visual-diff: branch`. The job summary shows the same data as collapsible sections without the interactive controls.
+
+The pull request comment is shortened to fit GitHub's 65,536-character limit; when rows are left out it says so and links the full report.
+
+### `visual-diff: summary` (default)
+
+- Writes the three parts as collapsible sections in the [job summary](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#adding-a-job-summary). The comment links to the workflow run.
+- No extra permissions or setup.
+- Limits: the summary has no tabs and can't show images (only a list of changed images), and GitHub caps it at 1 MiB, so long diffs are cut off with a note. It is kept for as long as the run's logs.
+
+### `visual-diff: branch`
+
+- Commits a self-contained HTML page with tabs to `<report-branch>/pr-<number>/index.html`, plus changed images (up to 5 MB each). The job summary is still written.
+- Each run replaces the branch with a single parentless commit, so older versions of a report don't pile up in the repository's history.
+- When the pull request closes, the action deletes that directory. Add `closed` to the trigger types for this.
+- Overlapping runs are detected and retried. If two land within milliseconds of each other, one report can be overwritten; it comes back on that pull request's next push.
+- If the link in the comment is wrong (a custom domain, or your token can't read the Pages settings), set `pages-url`.
+- If publishing fails (for example, a fork pull request with a read-only token), the action warns and links the job summary instead.
+
+Setup:
+
+1. Grant `contents: write` (plus `pull-requests: write` for the comment).
+2. Turn on GitHub Pages: **Settings → Pages → Build and deployment → Deploy from a branch**, then pick `file-diff-reports` and `/ (root)`. The branch exists after the first run.
+3. Pages sites are public on public repositories. On private repositories, Pages visibility depends on your plan.
+
+```yaml
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, closed]
+
+permissions:
+    contents: write # commit the report to file-diff-reports
+    pull-requests: write
+
+jobs:
+    file-diff:
+        runs-on: ubuntu-latest
+        steps:
+            # ...build head and base as in Usage, skipped when the PR is closed:
+            # if: github.event.action != 'closed'
+            - uses: allonsy-studio/actions-file-diff@v1
+              with:
+                  base-path: ${{ github.workspace }}/base
+                  visual-diff: branch
+```
+
+On a `closed` event the action only removes the report, so the build steps can be skipped with `if: github.event.action != 'closed'`.
 
 ### How sizes are counted
 
@@ -160,16 +230,26 @@ Excluding sourcemaps with a `!` pattern:
 
 ## Development
 
-Plain JavaScript, no TypeScript. The source under `src/` is bundled with esbuild into `dist/index.cjs`, which is what `action.yml` runs; the bundle is committed so consumers get the action's dependencies without an install step.
+Plain JavaScript, no TypeScript. The source under `src/` is bundled with esbuild into `dist/index.js`, which is what `action.yml` runs; the bundle is committed so consumers get the action's dependencies without an install step.
 
 ```sh
 yarn lint      # eslint (flat config, @eslint/js recommended + prettier)
 yarn format    # prettier --write, then eslint --fix
-yarn test      # jest, JS-only
-yarn build     # esbuild -> dist/index.cjs (committed; CI fails if stale)
+yarn test      # jest, JS-only (line diffs need git on the PATH)
+yarn test:browser   # drives the report page in Chrome (CHROME_PATH, or the installed Chrome)
+yarn build     # esbuild -> dist/index.js (committed; CI fails if stale)
+yarn preview   # render the visual diff page from a sample fixture into preview/
+yarn preview --serve   # serve it at http://localhost:4173 with live reload
 ```
 
-Run `yarn build` and commit `dist/index.cjs` whenever `src/` or a dependency changes. The self-test workflow (`.github/workflows/self-test.yml`) rebuilds the bundle, fails if the committed copy is stale, and runs the action against a fixture tree (`scripts/make-fixture.sh`) on every pull request, asserting the `has-changed` and `total-size` outputs.
+### Styling the visual diff page
+
+- Styles live in `src/report-page.css`. They're bundled as text (esbuild `--loader:.css=text`), so the published page stays a single self-contained file.
+- Colors, radius and fonts are custom properties on `:root`, with dark values in a `prefers-color-scheme` block.
+- `yarn preview --serve` re-renders on any change under `src/`. The sample data (`scripts/preview-fixture.js`) covers modified, added and removed files, a removed package, a binary file, a file over `max-diff-size`, and PNG/SVG image changes.
+- The preview has two variants, `/base/` and `/no-base/`. Each also writes the `comment.md` and `summary.md` the action would post.
+
+Run `yarn build` and commit `dist/index.js` whenever `src/` or a dependency changes. The self-test workflow (`.github/workflows/self-test.yml`) rebuilds the bundle, fails if the committed copy is stale, and runs the action against a fixture tree (`scripts/make-fixture.sh`) on every pull request, asserting the `has-changed` and `total-size` outputs.
 
 <!-- weaver:contribution:START -->
 <!-- auto-generated by Weaver — do not edit between these markers -->
